@@ -18,14 +18,12 @@ export async function PATCH(
 
         // Se a requisição for para atualizar o status de um item específico do KDS
         if (itemId && itemStatus) {
-            // Atualização atômica direta via MongoDB garantindo persistência imediata
             const updateResult = await Order.updateOne(
                 { _id: id, "items._id": itemId },
                 { $set: { "items.$.status": itemStatus } }
             );
 
             if (updateResult.modifiedCount === 0) {
-                // Fallback caso o ID do subdocumento precise de busca em memória
                 const orderDoc = await Order.findById(id);
                 if (!orderDoc) {
                     return NextResponse.json({ success: false, error: 'Comanda não encontrada' }, { status: 404 });
@@ -64,7 +62,7 @@ export async function PATCH(
             if (status) order.status = status;
             if (paymentMethod) order.paymentMethod = paymentMethod;
 
-            // Adiciona SOMENTE os novos itens enviados ao editar a comanda aberta
+            // Adiciona SOMENTE os novos itens enviados (newItems), preservando rigorosamente o status dos itens anteriores
             if (newItems && Array.isArray(newItems) && newItems.length > 0) {
                 for (const newItem of newItems) {
                     if (newItem.productId) {
@@ -73,6 +71,7 @@ export async function PATCH(
                         });
                     }
 
+                    // Procura se já existe um item pendente com o mesmo produto/nome para somar a quantidade
                     const existingItemIndex = order.items.findIndex(
                         (i: any) =>
                             (i.productId?.toString() === newItem.productId?.toString() || i.name === newItem.name) &&
@@ -82,6 +81,7 @@ export async function PATCH(
                     if (existingItemIndex > -1) {
                         order.items[existingItemIndex].quantity += newItem.quantity;
                     } else {
+                        // Adiciona o novo item como pendente, sem alterar os itens anteriores (concluídos ou em preparo)
                         order.items.push({
                             productId: newItem.productId,
                             name: newItem.name,

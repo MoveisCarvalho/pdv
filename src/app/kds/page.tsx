@@ -236,8 +236,8 @@ export default function KDSPage() {
                                                                 onClick={() => !isConcluded && updateItemStatus(order._id, item._id!, 'concluido')}
                                                                 disabled={isConcluded}
                                                                 className={`px-3 py-1 rounded-lg font-bold text-xs transition-colors flex items-center gap-1 shadow-sm ${isConcluded
-                                                                        ? 'bg-amber-500 text-white opacity-95 cursor-not-allowed shadow'
-                                                                        : 'bg-red-600 hover:bg-red-700 text-white'
+                                                                    ? 'bg-amber-500 text-white opacity-95 cursor-not-allowed shadow'
+                                                                    : 'bg-red-600 hover:bg-red-700 text-white'
                                                                     }`}
                                                             >
                                                                 <CheckCircle size={12} /> {isConcluded ? 'Item Finalizado' : 'Finalizar Item'}
