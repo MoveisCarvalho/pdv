@@ -14,7 +14,35 @@ export async function PATCH(
         const id = resolvedParams.id;
 
         const body = await request.json();
-        const { status, cancellationReason, cancelledBy, paymentMethod, items, total, newItems } = body;
+        const { status, cancellationReason, cancelledBy, paymentMethod, total, newItems, itemId, itemStatus } = body;
+
+        // Se a requisição for para atualizar o status de um item específico do KDS
+        if (itemId && itemStatus) {
+            // Atualização atômica direta via MongoDB garantindo persistência imediata
+            const updateResult = await Order.updateOne(
+                { _id: id, "items._id": itemId },
+                { $set: { "items.$.status": itemStatus } }
+            );
+
+            if (updateResult.modifiedCount === 0) {
+                // Fallback caso o ID do subdocumento precise de busca em memória
+                const orderDoc = await Order.findById(id);
+                if (!orderDoc) {
+                    return NextResponse.json({ success: false, error: 'Comanda não encontrada' }, { status: 404 });
+                }
+                const item = orderDoc.items.find((i: any) => i._id?.toString() === itemId);
+                if (item) {
+                    item.status = itemStatus;
+                    orderDoc.markModified('items');
+                    await orderDoc.save();
+                } else {
+                    return NextResponse.json({ success: false, error: 'Item não encontrado na comanda' }, { status: 404 });
+                }
+            }
+
+            const updatedOrder = await Order.findById(id);
+            return NextResponse.json({ success: true, data: updatedOrder }, { status: 200 });
+        }
 
         const order = await Order.findById(id);
         if (!order) {
@@ -33,23 +61,22 @@ export async function PATCH(
             order.cancellationReason = cancellationReason;
             order.cancelledBy = cancelledBy;
         } else {
-            // Atualiza status e método de pagamento se enviados
             if (status) order.status = status;
             if (paymentMethod) order.paymentMethod = paymentMethod;
 
-            // Se novos itens foram enviados para a comanda aberta (enviar para cozinha)
+            // Adiciona SOMENTE os novos itens enviados ao editar a comanda aberta
             if (newItems && Array.isArray(newItems) && newItems.length > 0) {
                 for (const newItem of newItems) {
-                    // Dá baixa no estoque do novo item adicionado
                     if (newItem.productId) {
                         await Product.findByIdAndUpdate(newItem.productId, {
                             $inc: { stock: -newItem.quantity }
                         });
                     }
 
-                    // Verifica se o item já existe na comanda para somar a quantidade ou adicioná-lo
                     const existingItemIndex = order.items.findIndex(
-                        (i: any) => i.productId?.toString() === newItem.productId?.toString() || i.name === newItem.name
+                        (i: any) =>
+                            (i.productId?.toString() === newItem.productId?.toString() || i.name === newItem.name) &&
+                            i.status === 'pendente'
                     );
 
                     if (existingItemIndex > -1) {
@@ -59,13 +86,13 @@ export async function PATCH(
                             productId: newItem.productId,
                             name: newItem.name,
                             quantity: newItem.quantity,
-                            price: newItem.price
+                            price: newItem.price,
+                            status: 'pendente'
                         });
                     }
                 }
             }
 
-            // Atualiza o total geral da comanda se enviado
             if (typeof total === 'number') {
                 order.total = total;
             }

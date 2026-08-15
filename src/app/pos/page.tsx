@@ -150,6 +150,12 @@ export default function POSPage() {
             };
         });
         setCart(mappedCart);
+
+        // No celular, rola suavemente para a seção do carrinho/comanda ativa para facilitar a edição
+        const cartElement = document.getElementById('cart-section');
+        if (cartElement) {
+            cartElement.scrollIntoView({ behavior: 'smooth' });
+        }
     };
 
     const totalCart = cart.reduce((acc, item) => acc + item.price * item.quantity, 0);
@@ -239,29 +245,36 @@ export default function POSPage() {
     };
 
     return (
-        <div className="h-screen bg-slate-100 dark:bg-slate-950 text-slate-900 dark:text-slate-100 flex flex-col overflow-hidden transition-colors duration-200">
-            <header className="bg-slate-900 text-white px-6 py-3 flex justify-between items-center shadow-md border-b border-slate-800 shrink-0">
-                <div className="flex items-center gap-4">
+        <div className="min-h-screen lg:h-screen bg-slate-100 dark:bg-slate-950 text-slate-900 dark:text-slate-100 flex flex-col overflow-x-hidden lg:overflow-hidden transition-colors duration-200">
+            <header className="bg-slate-900 text-white px-4 lg:px-6 py-3 flex justify-between items-center shadow-md border-b border-slate-800 shrink-0">
+                <div className="flex items-center gap-3">
                     <Link href="/" className="p-2 bg-slate-800 hover:bg-slate-700 rounded-xl transition-colors">
                         <ArrowLeft size={20} />
                     </Link>
-                    <h1 className="text-lg font-bold flex items-center gap-2">
-                        <ShoppingCart className="text-indigo-400" /> PDV - Frente de Caixa & Mesas Ágil
+                    <h1 className="text-sm lg:text-lg font-bold flex items-center gap-2">
+                        <ShoppingCart className="text-indigo-400 shrink-0" />
+                        <span className="truncate">PDV - Frente de Caixa & Mesas Ágil</span>
                     </h1>
                 </div>
                 <div className="flex items-center gap-3">
                     <ThemeToggle />
                     <Tooltip text="Sistema de Caixa Ativo">
-                        <span className="text-xs bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 px-3 py-1 rounded-full font-medium">
+                        <span className="hidden sm:inline-block text-xs bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 px-3 py-1 rounded-full font-medium">
                             Caixa Operacional
                         </span>
                     </Tooltip>
                 </div>
             </header>
 
-            <div className="flex-1 grid grid-cols-1 lg:grid-cols-12 p-4 gap-4 max-w-[1800px] mx-auto w-full overflow-hidden">
+            {/* 
+              No Desktop (lg): Mantém o grid de 3 colunas com altura fixa da tela.
+              No Smartphone: Transforma em uma pilha vertical com rolagem natural (scroll), 
+              permitindo ver Mesas, Catálogo, Carrinho e Comandas Abertas sequencialmente[cite: 1].
+            */}
+            <div className="flex-1 lg:grid lg:grid-cols-12 p-3 lg:p-4 gap-4 max-w-[1800px] mx-auto w-full overflow-y-auto lg:overflow-hidden flex flex-col">
+
                 {/* Lado Esquerdo (span-6): Mesas no topo, Produtos abaixo */}
-                <div className="lg:col-span-6 flex flex-col gap-4 overflow-hidden min-h-0">
+                <div className="lg:col-span-6 flex flex-col gap-4 min-h-0">
                     <TableSelector
                         availableTables={availableTables}
                         openOrdersMap={openOrdersMap}
@@ -278,8 +291,8 @@ export default function POSPage() {
                     />
                 </div>
 
-                {/* Centro (span-3): Carrinho / Comanda Ativa */}
-                <div className="lg:col-span-3 flex flex-col overflow-hidden min-h-0">
+                {/* Centro (span-3): Carrinho / Comanda Ativa (com ID para scroll automático ao editar) */}
+                <div id="cart-section" className="lg:col-span-3 flex flex-col min-h-0">
                     <CartPanel
                         selectedTable={selectedTable}
                         currentOpenOrderId={currentOpenOrderId}
@@ -294,7 +307,7 @@ export default function POSPage() {
                 </div>
 
                 {/* Lado Direito (span-3): Comandas Abertas */}
-                <div className="lg:col-span-3 bg-white dark:bg-slate-900 p-4 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm flex flex-col min-h-0 overflow-hidden">
+                <div className="lg:col-span-3 bg-white dark:bg-slate-900 p-4 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm flex flex-col min-h-[300px] lg:min-h-0 overflow-hidden">
                     <div className="shrink-0 mb-2">
                         <h2 className="text-xs font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wider">
                             Comandas Abertas
