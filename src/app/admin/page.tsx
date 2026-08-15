@@ -52,9 +52,9 @@ export default function AdminPage() {
     const fetchData = async () => {
         try {
             const [prodRes, catRes, tabRes] = await Promise.all([
-                fetch('/api/products'),
-                fetch('/api/categories'),
-                fetch('/api/tables')
+                fetch('/api/products', { cache: 'no-store' }),
+                fetch('/api/categories', { cache: 'no-store' }),
+                fetch('/api/tables', { cache: 'no-store' })
             ]);
             const prodJson = await prodRes.json();
             const catJson = await catRes.json();
