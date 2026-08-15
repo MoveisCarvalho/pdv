@@ -14,7 +14,7 @@ export async function PATCH(
         const id = resolvedParams.id;
 
         const body = await request.json();
-        const { status, cancellationReason, cancelledBy, paymentMethod, total, newItems, itemId, itemStatus } = body;
+        const { status, cancellationReason, cancelledBy, paymentMethod, total, items, newItems, itemId, itemStatus } = body;
 
         // Se a requisição for para atualizar o status de um item específico do KDS
         if (itemId && itemStatus) {
@@ -59,11 +59,78 @@ export async function PATCH(
             order.cancellationReason = cancellationReason;
             order.cancelledBy = cancelledBy;
         } else {
-            if (status) order.status = status;
+            if (status) {
+                order.status = status;
+                // Se o pedido inteiro foi concluído, marca todos os itens da comanda como concluídos automaticamente
+                if (status === 'concluido') {
+                    order.items.forEach((item: any) => {
+                        item.status = 'concluido';
+                    });
+                }
+            }
             if (paymentMethod) order.paymentMethod = paymentMethod;
 
-            // Adiciona SOMENTE os novos itens enviados (newItems), preservando rigorosamente o status dos itens anteriores
-            if (newItems && Array.isArray(newItems) && newItems.length > 0) {
+            // 1. Suporte caso o frontend envie a lista completa de itens (reconciliação inteligente)
+            if (items && Array.isArray(items)) {
+                const existingItems = order.items || [];
+
+                // Mantém rigorosamente todos os itens que já estavam concluídos ou em preparo na cozinha
+                const activeOrCompletedItems = existingItems.filter(
+                    (i: any) => i.status === 'concluido' || i.status === 'preparando'
+                );
+
+                const updatedItems: any[] = [...activeOrCompletedItems];
+
+                // Processa os itens vindos do carrinho atualizado
+                for (const cartItem of items) {
+                    // Calcula quantos já existem desse produto como 'concluido' ou 'preparando'
+                    const completedOrPrepCount = activeOrCompletedItems
+                        .filter((i: any) =>
+                            (cartItem.productId && i.productId?.toString() === cartItem.productId?.toString()) ||
+                            (!cartItem.productId && i.name === cartItem.name)
+                        )
+                        .reduce((sum: number, i: any) => sum + i.quantity, 0);
+
+                    // Verifica se já existe um item pendente para atualizar a quantidade dele
+                    const existingPendingIndex = existingItems.findIndex(
+                        (i: any) =>
+                            i.status === 'pendente' &&
+                            (
+                                (cartItem.productId && i.productId?.toString() === cartItem.productId?.toString()) ||
+                                (!cartItem.productId && i.name === cartItem.name)
+                            )
+                    );
+
+                    const neededPendingQuantity = cartItem.quantity - completedOrPrepCount;
+
+                    if (existingPendingIndex > -1) {
+                        const existingPending = existingItems[existingPendingIndex];
+                        if (neededPendingQuantity > 0) {
+                            updatedItems.push({
+                                _id: existingPending._id,
+                                productId: existingPending.productId,
+                                name: existingPending.name,
+                                price: existingPending.price,
+                                quantity: neededPendingQuantity,
+                                status: 'pendente'
+                            });
+                        }
+                    } else if (neededPendingQuantity > 0) {
+                        // Adiciona o novo item adicional como pendente na cozinha
+                        updatedItems.push({
+                            productId: cartItem.productId,
+                            name: cartItem.name,
+                            price: cartItem.price,
+                            quantity: neededPendingQuantity,
+                            status: 'pendente'
+                        });
+                    }
+                }
+
+                order.items = updatedItems;
+            }
+            // 2. Suporte caso o frontend envie explicitamente apenas os newItems
+            else if (newItems && Array.isArray(newItems) && newItems.length > 0) {
                 for (const newItem of newItems) {
                     if (newItem.productId) {
                         await Product.findByIdAndUpdate(newItem.productId, {
@@ -71,25 +138,13 @@ export async function PATCH(
                         });
                     }
 
-                    // Procura se já existe um item pendente com o mesmo produto/nome para somar a quantidade
-                    const existingItemIndex = order.items.findIndex(
-                        (i: any) =>
-                            (i.productId?.toString() === newItem.productId?.toString() || i.name === newItem.name) &&
-                            i.status === 'pendente'
-                    );
-
-                    if (existingItemIndex > -1) {
-                        order.items[existingItemIndex].quantity += newItem.quantity;
-                    } else {
-                        // Adiciona o novo item como pendente, sem alterar os itens anteriores (concluídos ou em preparo)
-                        order.items.push({
-                            productId: newItem.productId,
-                            name: newItem.name,
-                            quantity: newItem.quantity,
-                            price: newItem.price,
-                            status: 'pendente'
-                        });
-                    }
+                    order.items.push({
+                        productId: newItem.productId,
+                        name: newItem.name,
+                        quantity: newItem.quantity,
+                        price: newItem.price,
+                        status: 'pendente'
+                    });
                 }
             }
 

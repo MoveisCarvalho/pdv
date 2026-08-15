@@ -61,12 +61,12 @@ export default function CartPanel({
                     </div>
                 ) : (
                     <div className="space-y-2 max-h-[calc(100vh-330px)] overflow-y-auto pr-1">
-                        {cart.map((item) => {
+                        {cart.map((item, index) => {
                             const isSentAndUnchanged =
                                 item.isAlreadySent && item.quantity === (item.originalQuantity || 0);
                             return (
                                 <div
-                                    key={item._id}
+                                    key={`${item._id}-${index}`}
                                     className="flex justify-between items-center bg-slate-50 dark:bg-slate-950 p-2 rounded-xl border border-slate-100 dark:border-slate-800"
                                 >
                                     <div className="flex-1 pr-2 min-w-0">

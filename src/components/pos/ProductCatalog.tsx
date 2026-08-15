@@ -44,6 +44,15 @@ export default function ProductCatalog({
             return a.name.localeCompare(b.name, 'pt-BR', { sensitivity: 'accent' });
         });
 
+    const groupedProducts = filteredProducts.reduce((acc, prod) => {
+        const cat = prod.category || 'Geral';
+        if (!acc[cat]) {
+            acc[cat] = [];
+        }
+        acc[cat].push(prod);
+        return acc;
+    }, {} as Record<string, Product[]>);
+
     return (
         <div className="flex-1 bg-white dark:bg-slate-900 p-4 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm flex flex-col min-h-0 overflow-hidden">
             <div className="flex flex-col sm:flex-row justify-between items-center gap-3 mb-3 shrink-0">
@@ -74,31 +83,43 @@ export default function ProductCatalog({
                     <p className="text-slate-500 dark:text-slate-400 text-xs">Nenhum produto encontrado.</p>
                 </div>
             ) : (
-                <div className="flex-1 overflow-y-auto pr-1 space-y-2">
-                    <div className="grid grid-cols-2 xl:grid-cols-3 gap-2.5">
-                        {filteredProducts.map((prod) => (
-                            <button
-                                key={prod._id}
-                                onClick={() => onAddToCart(prod)}
-                                className="bg-slate-50 dark:bg-slate-950 p-2.5 rounded-xl border border-slate-200 dark:border-slate-800 hover:border-indigo-500 transition-all text-left flex flex-col justify-between group shadow-2xs hover:shadow-md"
-                            >
-                                <div>
-                                    <h3 className="font-semibold text-slate-800 dark:text-slate-100 group-hover:text-indigo-600 text-xs line-clamp-2">
-                                        {prod.name}
-                                    </h3>
-                                    <span className="text-[9px] text-slate-400">{prod.category || 'Geral'}</span>
-                                </div>
-                                <div className="mt-2 flex justify-between items-center w-full">
-                                    <span className="font-bold text-indigo-600 dark:text-indigo-400 text-xs">
-                                        R$ {prod.price.toFixed(2)}
-                                    </span>
-                                    <span className="p-1 bg-indigo-50 dark:bg-indigo-900 text-indigo-600 dark:text-indigo-400 rounded group-hover:bg-indigo-600 group-hover:text-white transition-colors">
-                                        <Plus size={13} />
-                                    </span>
-                                </div>
-                            </button>
-                        ))}
-                    </div>
+                <div className="flex-1 overflow-y-auto pr-1 space-y-4">
+                    {Object.entries(groupedProducts).map(([category, catProducts]) => (
+                        <div key={category} className="space-y-2">
+                            <div className="flex items-center gap-2 pt-2 pb-1 border-b border-slate-200 dark:border-slate-800">
+                                <h3 className="text-xs font-bold text-indigo-600 dark:text-indigo-400 uppercase tracking-wider">
+                                    {category}
+                                </h3>
+                                <span className="text-[10px] bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 px-2 py-0.5 rounded-full font-medium">
+                                    {catProducts.length}
+                                </span>
+                            </div>
+                            <div className="grid grid-cols-2 xl:grid-cols-3 gap-2.5">
+                                {catProducts.map((prod) => (
+                                    <button
+                                        key={prod._id}
+                                        onClick={() => onAddToCart(prod)}
+                                        className="bg-slate-50 dark:bg-slate-950 p-2.5 rounded-xl border border-slate-200 dark:border-slate-800 hover:border-indigo-500 transition-all text-left flex flex-col justify-between group shadow-2xs hover:shadow-md"
+                                    >
+                                        <div>
+                                            <h3 className="font-semibold text-slate-800 dark:text-slate-100 group-hover:text-indigo-600 text-xs line-clamp-2">
+                                                {prod.name}
+                                            </h3>
+                                            <span className="text-[9px] text-slate-400">{prod.category || 'Geral'}</span>
+                                        </div>
+                                        <div className="mt-2 flex justify-between items-center w-full">
+                                            <span className="font-bold text-indigo-600 dark:text-indigo-400 text-xs">
+                                                R$ {prod.price.toFixed(2)}
+                                            </span>
+                                            <span className="p-1 bg-indigo-50 dark:bg-indigo-900 text-indigo-600 dark:text-indigo-400 rounded group-hover:bg-indigo-600 group-hover:text-white transition-colors">
+                                                <Plus size={13} />
+                                            </span>
+                                        </div>
+                                    </button>
+                                ))}
+                            </div>
+                        </div>
+                    ))}
                 </div>
             )}
         </div>
