@@ -11,23 +11,12 @@ import TableSelector from '@/src/components/pos/TableSelector';
 import ProductCatalog from '@/src/components/pos/ProductCatalog';
 import CartPanel from '@/src/components/pos/CartPanel';
 import PaymentModal from '@/src/components/pos/PaymentModal';
-
-interface Product {
-    _id: string;
-    name: string;
-    price: number;
-    stock: number;
-    category: string;
-}
-
-interface CartItem extends Product {
-    quantity: number;
-    originalQuantity?: number;
-    isAlreadySent?: boolean;
-}
+import AddItemModal from '@/src/components/pos/AddItemModal';
+import { Addon, Product, CartItem } from '@/src/types';
 
 export default function POSPage() {
     const [products, setProducts] = useState<Product[]>([]);
+    const [allAddons, setAllAddons] = useState<Addon[]>([]);
     const [availableTables, setAvailableTables] = useState<string[]>([]);
     const [openOrdersMap, setOpenOrdersMap] = useState<string[]>([]);
     const [cart, setCart] = useState<CartItem[]>([]);
@@ -42,6 +31,10 @@ export default function POSPage() {
     const [refreshKey, setRefreshKey] = useState(0);
     const [searchTerm, setSearchTerm] = useState('');
 
+    // Estados para o modal de edição de item
+    const [editingItem, setEditingItem] = useState<CartItem | null>(null);
+    const [isEditModalOpen, setIsEditModalOpen] = useState(false);
+
     useEffect(() => {
         fetchData();
     }, [refreshKey]);
@@ -49,17 +42,18 @@ export default function POSPage() {
     const fetchData = async () => {
         try {
             setLoading(true);
-            const [prodRes, tableRes] = await Promise.all([
+            const [prodRes, tableRes, addonRes] = await Promise.all([
                 fetch('/api/products'),
-                fetch('/api/tables')
+                fetch('/api/tables'),
+                fetch('/api/addons')
             ]);
 
             const prodJson = await prodRes.json();
             const tableJson = await tableRes.json();
+            const addonJson = await addonRes.json();
 
-            if (prodJson.success) {
-                setProducts(prodJson.data);
-            }
+            if (prodJson.success) setProducts(prodJson.data);
+            if (addonJson.success) setAllAddons(addonJson.data);
 
             if (tableJson.success && Array.isArray(tableJson.data)) {
                 const tableNames = tableJson.data.map((t: any) => t.name);
@@ -93,24 +87,26 @@ export default function POSPage() {
         setCart([]);
     };
 
-    const addToCart = (product: Product) => {
+    const addToCart = (product: Product, selectedAddonIds: string[], observation: string) => {
         if (!selectedTable) {
             alert('Selecione uma mesa ou comanda antes de adicionar produtos.');
             return;
         }
 
+        const selectedAddons = allAddons.filter(a => selectedAddonIds.includes(a._id));
+
         setCart((prev) => {
-            const existing = prev.find((item) => item._id === product._id);
-            if (existing) {
-                if (existing.isAlreadySent) {
-                    const retransmit = confirm(`O item "${product.name}" já foi enviado para a cozinha. Deseja enviá-lo novamente (sem acréscimo na quantidade)?`);
-                    if (!retransmit) return prev;
-                }
-                return prev.map((item) =>
-                    item._id === product._id ? { ...item, quantity: item.quantity + 1 } : item
-                );
-            }
-            return [...prev, { ...product, quantity: 1, originalQuantity: 0, isAlreadySent: false }];
+            // Verifica se já existe um item com o mesmo produto e mesmos addons e observação
+            // Para simplificar, criamos um novo item separado (permite variações)
+            const newItem: CartItem = {
+                ...product,
+                quantity: 1,
+                originalQuantity: 0,
+                isAlreadySent: false,
+                selectedAddons,
+                observation,
+            };
+            return [...prev, newItem];
         });
     };
 
@@ -146,19 +142,24 @@ export default function POSPage() {
                 category: prod ? prod.category : 'Geral',
                 quantity: i.quantity,
                 originalQuantity: i.quantity,
-                isAlreadySent: true
+                isAlreadySent: true,
+                selectedAddons: i.addons || [],
+                observation: i.observation || '',
             };
         });
         setCart(mappedCart);
 
-        // No celular, rola suavemente para a seção do carrinho/comanda ativa para facilitar a edição
         const cartElement = document.getElementById('cart-section');
         if (cartElement) {
             cartElement.scrollIntoView({ behavior: 'smooth' });
         }
     };
 
-    const totalCart = cart.reduce((acc, item) => acc + item.price * item.quantity, 0);
+    const totalCart = cart.reduce((acc, item) => {
+        const addonsTotal = item.selectedAddons.reduce((a, b) => a + b.price, 0);
+        const unitPrice = item.price + addonsTotal;
+        return acc + unitPrice * item.quantity;
+    }, 0);
 
     const addedItems = currentOpenOrderId ? cart
         .map(item => {
@@ -169,12 +170,21 @@ export default function POSPage() {
                     productId: item._id,
                     name: item.name,
                     quantity: addedQty,
-                    price: item.price
+                    price: item.price,
+                    addons: item.selectedAddons,
+                    observation: item.observation,
                 };
             }
             return null;
         })
-        .filter(Boolean) : cart.map((i) => ({ productId: i._id, name: i.name, quantity: i.quantity, price: i.price }));
+        .filter(Boolean) : cart.map((i) => ({
+            productId: i._id,
+            name: i.name,
+            quantity: i.quantity,
+            price: i.price,
+            addons: i.selectedAddons,
+            observation: i.observation,
+        }));
 
     const canSendToKitchen = cart.length > 0 && (!currentOpenOrderId || addedItems.length > 0);
 
@@ -192,14 +202,28 @@ export default function POSPage() {
             const method = currentOpenOrderId ? 'PATCH' : 'POST';
 
             const payload = currentOpenOrderId ? {
-                items: cart.map((i) => ({ productId: i._id, name: i.name, quantity: i.quantity, price: i.price })),
+                items: cart.map((i) => ({
+                    productId: i._id,
+                    name: i.name,
+                    quantity: i.quantity,
+                    price: i.price,
+                    addons: i.selectedAddons,
+                    observation: i.observation,
+                })),
                 total: totalCart,
                 status: keepOpen ? 'aberto' : 'pago',
                 paymentMethod: keepOpen ? 'pendente' : chosenPaymentMethod,
                 newItems: addedItems
             } : {
                 table: selectedTable,
-                items: cart.map((i) => ({ productId: i._id, name: i.name, quantity: i.quantity, price: i.price })),
+                items: cart.map((i) => ({
+                    productId: i._id,
+                    name: i.name,
+                    quantity: i.quantity,
+                    price: i.price,
+                    addons: i.selectedAddons,
+                    observation: i.observation,
+                })),
                 total: totalCart,
                 paymentMethod: keepOpen ? 'pendente' : chosenPaymentMethod,
                 status: keepOpen ? 'aberto' : 'pago',
@@ -244,6 +268,32 @@ export default function POSPage() {
         handleCheckout(false, modalPaymentMethod);
     };
 
+    // Funções para editar item
+    const handleEditItem = (item: CartItem) => {
+        setEditingItem(item);
+        setIsEditModalOpen(true);
+    };
+
+    const handleEditModalConfirm = (selectedAddonIds: string[], observation: string) => {
+        if (editingItem) {
+            const selectedAddons = allAddons.filter(a => selectedAddonIds.includes(a._id));
+            setCart(prev =>
+                prev.map(item =>
+                    item._id === editingItem._id
+                        ? { ...item, selectedAddons, observation }
+                        : item
+                )
+            );
+        }
+        setIsEditModalOpen(false);
+        setEditingItem(null);
+    };
+
+    const handleEditModalClose = () => {
+        setIsEditModalOpen(false);
+        setEditingItem(null);
+    };
+
     return (
         <div className="min-h-screen lg:h-screen bg-slate-100 dark:bg-slate-950 text-slate-900 dark:text-slate-100 flex flex-col overflow-x-hidden lg:overflow-hidden transition-colors duration-200">
             <header className="bg-slate-900 text-white px-4 lg:px-6 py-3 flex justify-between items-center shadow-md border-b border-slate-800 shrink-0">
@@ -266,14 +316,7 @@ export default function POSPage() {
                 </div>
             </header>
 
-            {/* 
-              No Desktop (lg): Mantém o grid de 3 colunas com altura fixa da tela.
-              No Smartphone: Transforma em uma pilha vertical com rolagem natural (scroll), 
-              permitindo ver Mesas, Catálogo, Carrinho e Comandas Abertas sequencialmente[cite: 1].
-            */}
             <div className="flex-1 lg:grid lg:grid-cols-12 p-3 lg:p-4 gap-4 max-w-[1800px] mx-auto w-full overflow-y-auto lg:overflow-hidden flex flex-col">
-
-                {/* Lado Esquerdo (span-6): Mesas no topo, Produtos abaixo */}
                 <div className="lg:col-span-6 flex flex-col gap-4 min-h-0">
                     <TableSelector
                         availableTables={availableTables}
@@ -291,7 +334,6 @@ export default function POSPage() {
                     />
                 </div>
 
-                {/* Centro (span-3): Carrinho / Comanda Ativa (com ID para scroll automático ao editar) */}
                 <div id="cart-section" className="lg:col-span-3 flex flex-col min-h-0">
                     <CartPanel
                         selectedTable={selectedTable}
@@ -303,10 +345,10 @@ export default function POSPage() {
                         onRemoveFromCart={removeFromCart}
                         onSendToKitchen={() => handleCheckout(true)}
                         onOpenPaymentModal={handleOpenPaymentModal}
+                        onEditItem={handleEditItem}
                     />
                 </div>
 
-                {/* Lado Direito (span-3): Comandas Abertas */}
                 <div className="lg:col-span-3 bg-white dark:bg-slate-900 p-4 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm flex flex-col min-h-[300px] lg:min-h-0 overflow-hidden">
                     <div className="shrink-0 mb-2">
                         <h2 className="text-xs font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wider">
@@ -335,6 +377,15 @@ export default function POSPage() {
                 dynamicPixPayload={dynamicPixPayload}
                 onClose={() => setIsPaymentModalOpen(false)}
                 onConfirm={handleConfirmPaymentModal}
+            />
+
+            <AddItemModal
+                isOpen={isEditModalOpen}
+                product={editingItem ? { ...editingItem, price: editingItem.price } : null}
+                initialSelectedAddonIds={editingItem?.selectedAddons.map(a => a._id) || []}
+                initialObservation={editingItem?.observation || ''}
+                onClose={handleEditModalClose}
+                onConfirm={handleEditModalConfirm}
             />
         </div>
     );

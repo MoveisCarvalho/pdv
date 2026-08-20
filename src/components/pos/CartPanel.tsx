@@ -1,19 +1,6 @@
 import React from 'react';
-import { ShoppingCart, Plus, Minus, Trash2, CheckCircle2 } from 'lucide-react';
-
-interface Product {
-    _id: string;
-    name: string;
-    price: number;
-    stock: number;
-    category: string;
-}
-
-interface CartItem extends Product {
-    quantity: number;
-    originalQuantity?: number;
-    isAlreadySent?: boolean;
-}
+import { ShoppingCart, Plus, Minus, Trash2, CheckCircle2, Edit3 } from 'lucide-react';
+import { Addon, Product, CartItem } from '@/src/types';
 
 interface CartPanelProps {
     selectedTable: string;
@@ -25,6 +12,7 @@ interface CartPanelProps {
     onRemoveFromCart: (productId: string) => void;
     onSendToKitchen: () => void;
     onOpenPaymentModal: () => void;
+    onEditItem: (item: CartItem) => void;
 }
 
 export default function CartPanel({
@@ -37,6 +25,7 @@ export default function CartPanel({
     onRemoveFromCart,
     onSendToKitchen,
     onOpenPaymentModal,
+    onEditItem,
 }: CartPanelProps) {
     return (
         <div className="lg:col-span-3 bg-white dark:bg-slate-900 p-4 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm flex flex-col justify-between min-h-0 overflow-hidden">
@@ -64,52 +53,76 @@ export default function CartPanel({
                         {cart.map((item, index) => {
                             const isSentAndUnchanged =
                                 item.isAlreadySent && item.quantity === (item.originalQuantity || 0);
+                            const basePrice = item.price;
+                            const addonsTotal = (item.selectedAddons || []).reduce((acc, a) => acc + a.price, 0);
+                            const unitPriceWithAddons = basePrice + addonsTotal;
+                            const itemTotal = unitPriceWithAddons * item.quantity;
+
                             return (
                                 <div
                                     key={`${item._id}-${index}`}
-                                    className="flex justify-between items-center bg-slate-50 dark:bg-slate-950 p-2 rounded-xl border border-slate-100 dark:border-slate-800"
+                                    className="flex flex-col bg-slate-50 dark:bg-slate-950 p-2 rounded-xl border border-slate-100 dark:border-slate-800"
                                 >
-                                    <div className="flex-1 pr-2 min-w-0">
-                                        <h4 className="font-medium text-slate-800 dark:text-slate-200 text-xs flex items-center gap-1 truncate">
-                                            <span className="truncate">{item.name}</span>
-                                            {item.isAlreadySent && (
-                                                <span className="text-[9px] bg-amber-500/10 text-amber-600 dark:text-amber-400 px-1 rounded font-bold shrink-0">
-                                                    Cozinha
-                                                </span>
+                                    <div className="flex justify-between items-center">
+                                        <div className="flex-1 pr-2 min-w-0">
+                                            <h4 className="font-medium text-slate-800 dark:text-slate-200 text-xs flex items-center gap-1 truncate">
+                                                <span className="truncate">{item.name}</span>
+                                                {item.isAlreadySent && (
+                                                    <span className="text-[9px] bg-amber-500/10 text-amber-600 dark:text-amber-400 px-1 rounded font-bold shrink-0">
+                                                        Cozinha
+                                                    </span>
+                                                )}
+                                            </h4>
+                                            {item.selectedAddons && item.selectedAddons.length > 0 && (
+                                                <div className="text-[9px] text-slate-500 dark:text-slate-400 truncate">
+                                                    {item.selectedAddons.map(a => `${a.name} (+R$ ${a.price.toFixed(2)})`).join(', ')}
+                                                </div>
                                             )}
-                                        </h4>
-                                        <span className="text-[10px] font-semibold text-indigo-600 dark:text-indigo-400">
-                                            R$ {(item.price * item.quantity).toFixed(2)}
-                                        </span>
-                                    </div>
-                                    <div className="flex items-center gap-1 shrink-0">
-                                        {isSentAndUnchanged ? (
-                                            <span className="text-xs font-bold px-2 py-1 text-slate-600 dark:text-slate-400">
-                                                {item.quantity}x
+                                            {item.observation && (
+                                                <div className="text-[9px] text-indigo-500 dark:text-indigo-300 truncate italic">
+                                                    Obs: {item.observation}
+                                                </div>
+                                            )}
+                                            <span className="text-[10px] font-semibold text-indigo-600 dark:text-indigo-400">
+                                                R$ {itemTotal.toFixed(2)}
                                             </span>
-                                        ) : (
-                                            <>
-                                                <button
-                                                    onClick={() => onUpdateQuantity(item._id, -1)}
-                                                    className="p-1 text-slate-500 hover:bg-slate-200 dark:hover:bg-slate-800 rounded"
-                                                >
-                                                    <Minus size={12} />
-                                                </button>
-                                                <span className="text-xs font-bold w-4 text-center">{item.quantity}</span>
-                                                <button
-                                                    onClick={() => onUpdateQuantity(item._id, 1)}
-                                                    className="p-1 text-slate-500 hover:bg-slate-200 dark:hover:bg-slate-800 rounded"
-                                                >
-                                                    <Plus size={12} />
-                                                </button>
-                                                <button
-                                                    onClick={() => onRemoveFromCart(item._id)}
-                                                    className="p-1 text-red-500 hover:bg-red-50 dark:hover:bg-red-950/50 rounded ml-1"
-                                                >
-                                                    <Trash2 size={12} />
-                                                </button>
-                                            </>
-                                        )}
+                                        </div>
+                                        <div className="flex items-center gap-1 shrink-0">
+                                            {isSentAndUnchanged ? (
+                                                <span className="text-xs font-bold px-2 py-1 text-slate-600 dark:text-slate-400">
+                                                    {item.quantity}x
+                                                </span>
+                                            ) : (
+                                                <>
+                                                    <button
+                                                        onClick={() => onUpdateQuantity(item._id, -1)}
+                                                        className="p-1 text-slate-500 hover:bg-slate-200 dark:hover:bg-slate-800 rounded"
+                                                    >
+                                                        <Minus size={12} />
+                                                    </button>
+                                                    <span className="text-xs font-bold w-4 text-center">{item.quantity}</span>
+                                                    <button
+                                                        onClick={() => onUpdateQuantity(item._id, 1)}
+                                                        className="p-1 text-slate-500 hover:bg-slate-200 dark:hover:bg-slate-800 rounded"
+                                                    >
+                                                        <Plus size={12} />
+                                                    </button>
+                                                    <button
+                                                        onClick={() => onRemoveFromCart(item._id)}
+                                                        className="p-1 text-red-500 hover:bg-red-50 dark:hover:bg-red-950/50 rounded ml-1"
+                                                    >
+                                                        <Trash2 size={12} />
+                                                    </button>
+                                                </>
+                                            )}
+                                            <button
+                                                onClick={() => onEditItem(item)}
+                                                className="p-1 text-slate-400 hover:text-indigo-500 hover:bg-indigo-50 dark:hover:bg-indigo-950/50 rounded ml-0.5"
+                                                title="Editar extras/observação"
+                                            >
+                                                <Edit3 size={12} />
+                                            </button>
+                                        </div>
                                     </div>
                                 </div>
                             );

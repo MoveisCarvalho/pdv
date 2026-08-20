@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { ChefHat, Clock, CheckCircle, ArrowLeft, RefreshCw, AlertCircle, Filter } from 'lucide-react';
+import { ChefHat, Clock, CheckCircle, ArrowLeft, RefreshCw, AlertCircle, Filter, Plus, AlertTriangle } from 'lucide-react';
 import Tooltip from '@/src/components/Tooltip';
 import ThemeToggle from '@/src/components/ThemeToggle';
 import Link from 'next/link';
@@ -10,6 +10,9 @@ interface OrderItem {
     _id?: string;
     name: string;
     quantity: number;
+    price?: number;
+    addons?: { name: string; price: number }[];
+    observation?: string;
     status?: 'pendente' | 'preparando' | 'concluido';
 }
 
@@ -80,7 +83,6 @@ export default function KDSPage() {
         }
     };
 
-    // Lógica do Filtro
     const filteredOrders = orders.filter((order) => {
         const allItemsConcluded = order.items.length > 0 && order.items.every(i => i.status === 'concluido');
         const isOrderConcluded = order.status === 'concluido' || allItemsConcluded;
@@ -91,12 +93,11 @@ export default function KDSPage() {
         if (filterStatus === 'finalizados') {
             return isOrderConcluded;
         }
-        return true; // 'todos'
+        return true;
     });
 
     return (
         <div className="min-h-screen bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100 p-6 transition-colors duration-200">
-            {/* Header */}
             <header className="flex flex-col md:flex-row justify-between items-start md:items-center mb-8 pb-4 border-b border-slate-200 dark:border-slate-800 gap-4">
                 <div className="flex items-center gap-4">
                     <Link href="/" className="p-2 bg-slate-200 dark:bg-slate-800 hover:bg-slate-300 dark:hover:bg-slate-700 rounded-xl transition-colors">
@@ -111,14 +112,13 @@ export default function KDSPage() {
                 </div>
 
                 <div className="flex items-center gap-3 flex-wrap">
-                    {/* Filtro de Status */}
                     <div className="flex items-center gap-1.5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-1.5 rounded-xl shadow-sm">
                         <Filter size={14} className="text-slate-400 ml-1" />
                         <button
                             onClick={() => setFilterStatus('ativos')}
                             className={`px-3 py-1 rounded-lg text-xs font-semibold transition-colors ${filterStatus === 'ativos'
-                                ? 'bg-amber-500 text-white shadow'
-                                : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800'
+                                    ? 'bg-amber-500 text-white shadow'
+                                    : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800'
                                 }`}
                         >
                             Pendentes / Ativos
@@ -126,8 +126,8 @@ export default function KDSPage() {
                         <button
                             onClick={() => setFilterStatus('finalizados')}
                             className={`px-3 py-1 rounded-lg text-xs font-semibold transition-colors ${filterStatus === 'finalizados'
-                                ? 'bg-red-600 text-white shadow'
-                                : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800'
+                                    ? 'bg-red-600 text-white shadow'
+                                    : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800'
                                 }`}
                         >
                             Finalizados
@@ -135,8 +135,8 @@ export default function KDSPage() {
                         <button
                             onClick={() => setFilterStatus('todos')}
                             className={`px-3 py-1 rounded-lg text-xs font-semibold transition-colors ${filterStatus === 'todos'
-                                ? 'bg-slate-800 dark:bg-slate-700 text-white shadow'
-                                : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800'
+                                    ? 'bg-slate-800 dark:bg-slate-700 text-white shadow'
+                                    : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800'
                                 }`}
                         >
                             Todos
@@ -155,7 +155,6 @@ export default function KDSPage() {
                 </div>
             </header>
 
-            {/* Grid de Pedidos */}
             {loading ? (
                 <p className="text-center text-slate-400 dark:text-slate-500 py-20">Carregando painel da cozinha...</p>
             ) : filteredOrders.length === 0 ? (
@@ -174,10 +173,10 @@ export default function KDSPage() {
                             <div
                                 key={order._id}
                                 className={`border rounded-2xl p-5 flex flex-col justify-between shadow-sm dark:shadow-xl transition-all ${isCardCompleted
-                                    ? 'border-red-400 dark:border-red-500/50 bg-red-50/20 dark:bg-slate-900/90 text-red-900 dark:text-red-100'
-                                    : order.status === 'preparando'
-                                        ? 'border-blue-400 dark:border-blue-500/50 bg-blue-50/20 dark:bg-slate-900'
-                                        : 'border-amber-400 dark:border-amber-500/50 bg-amber-50/20 dark:bg-slate-900/90'
+                                        ? 'border-red-400 dark:border-red-500/50 bg-red-50/20 dark:bg-slate-900/90 text-red-900 dark:text-red-100'
+                                        : order.status === 'preparando'
+                                            ? 'border-blue-400 dark:border-blue-500/50 bg-blue-50/20 dark:bg-slate-900'
+                                            : 'border-amber-400 dark:border-amber-500/50 bg-amber-50/20 dark:bg-slate-900/90'
                                     }`}
                             >
                                 <div>
@@ -187,10 +186,10 @@ export default function KDSPage() {
                                         </span>
                                         <span
                                             className={`text-xs font-semibold px-2.5 py-1 rounded-full uppercase ${isCardCompleted
-                                                ? 'bg-red-100 dark:bg-red-500/20 text-red-800 dark:text-red-400 border border-red-300 dark:border-red-500/30'
-                                                : order.status === 'preparando'
-                                                    ? 'bg-blue-100 dark:bg-blue-500/20 text-blue-800 dark:text-blue-400 border border-blue-300 dark:border-blue-500/30'
-                                                    : 'bg-amber-100 dark:bg-amber-500/20 text-amber-800 dark:text-amber-400 border border-amber-300 dark:border-amber-500/30'
+                                                    ? 'bg-red-100 dark:bg-red-500/20 text-red-800 dark:text-red-400 border border-red-300 dark:border-red-500/30'
+                                                    : order.status === 'preparando'
+                                                        ? 'bg-blue-100 dark:bg-blue-500/20 text-blue-800 dark:text-blue-400 border border-blue-300 dark:border-blue-500/30'
+                                                        : 'bg-amber-100 dark:bg-amber-500/20 text-amber-800 dark:text-amber-400 border border-amber-300 dark:border-amber-500/30'
                                                 }`}
                                         >
                                             {isCardCompleted ? 'Concluído' : order.status}
@@ -200,13 +199,18 @@ export default function KDSPage() {
                                     <div className="space-y-2 mb-6">
                                         {order.items.map((item, idx) => {
                                             const isConcluded = item.status === 'concluido';
+                                            const addonsTotal = (item.addons || []).reduce((acc, a) => acc + a.price, 0);
+                                            const unitPrice = (item.price || 0) + addonsTotal;
+                                            const hasAddons = item.addons && item.addons.length > 0;
+                                            const hasObservation = item.observation && item.observation.trim() !== '';
+
                                             return (
                                                 <div
                                                     key={item._id || idx}
-                                                    className={`flex flex-col gap-2 text-sm p-3 rounded-xl border ${isConcluded
-                                                        ? 'border-amber-300 dark:border-amber-900/50 bg-amber-50/40 dark:bg-amber-950/20'
-                                                        : 'border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950/50'
-                                                        }`}
+                                                    className={`flex flex-col gap-2 text-sm p-3 rounded-xl border transition-all ${isConcluded
+                                                            ? 'border-amber-300 dark:border-amber-900/50 bg-amber-50/40 dark:bg-amber-950/20'
+                                                            : 'border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950/50'
+                                                        } ${!isConcluded && (hasAddons || hasObservation) ? 'ring-1 ring-amber-400 dark:ring-amber-600' : ''}`}
                                                 >
                                                     <div className="flex justify-between items-center">
                                                         <div className="flex items-center gap-2">
@@ -220,15 +224,42 @@ export default function KDSPage() {
                                                             </span>
                                                         </div>
                                                         <span className={`font-bold px-2 py-0.5 rounded text-xs ${isConcluded
-                                                            ? 'bg-amber-100 dark:bg-amber-500/20 text-amber-700 dark:text-amber-400'
-                                                            : 'bg-amber-100 dark:bg-amber-400/10 text-amber-600 dark:text-amber-400'
+                                                                ? 'bg-amber-100 dark:bg-amber-500/20 text-amber-700 dark:text-amber-400'
+                                                                : 'bg-amber-100 dark:bg-amber-400/10 text-amber-600 dark:text-amber-400'
                                                             }`}>
                                                             {item.quantity}x
                                                         </span>
                                                     </div>
 
+                                                    {/* Acréscimos com destaque vibrante */}
+                                                    {hasAddons && (
+                                                        <div className="flex flex-wrap gap-1.5 mt-1">
+                                                            {item.addons!.map((a, i) => (
+                                                                <span
+                                                                    key={i}
+                                                                    className="inline-flex items-center gap-1 bg-amber-500 dark:bg-amber-600 text-white font-bold text-[10px] px-2 py-0.5 rounded-full shadow-md animate-pulse"
+                                                                >
+                                                                    <Plus size={10} className="text-white" />
+                                                                    {a.name}
+                                                                    <span className="text-amber-100">(+R$ {a.price.toFixed(2)})</span>
+                                                                </span>
+                                                            ))}
+                                                        </div>
+                                                    )}
+
+                                                    {/* Observação com destaque ainda mais forte */}
+                                                    {hasObservation && (
+                                                        <div className="flex items-start gap-2 mt-1 p-2 bg-red-100 dark:bg-red-900/40 border-l-4 border-red-600 dark:border-red-500 rounded-r-lg shadow-sm">
+                                                            <AlertTriangle size={14} className="text-red-600 dark:text-red-400 shrink-0 mt-0.5 animate-pulse" />
+                                                            <span className="text-xs font-bold text-red-800 dark:text-red-200">
+                                                                Obs: {item.observation}
+                                                            </span>
+                                                        </div>
+                                                    )}
+
                                                     <div className="flex justify-between items-center pt-2 border-t border-slate-100 dark:border-slate-800/60 text-xs">
-                                                        <span className={`font-semibold ${isConcluded ? 'text-amber-600 dark:text-amber-400' : 'text-amber-600 dark:text-amber-400'}`}>
+                                                        <span className={`font-semibold ${isConcluded ? 'text-amber-600 dark:text-amber-400' : 'text-amber-600 dark:text-amber-400'
+                                                            }`}>
                                                             {isConcluded ? 'Pronto' : 'Aguardando Preparo'}
                                                         </span>
                                                         {item._id && (
@@ -236,8 +267,8 @@ export default function KDSPage() {
                                                                 onClick={() => !isConcluded && updateItemStatus(order._id, item._id!, 'concluido')}
                                                                 disabled={isConcluded}
                                                                 className={`px-3 py-1 rounded-lg font-bold text-xs transition-colors flex items-center gap-1 shadow-sm ${isConcluded
-                                                                    ? 'bg-amber-500 text-white opacity-95 cursor-not-allowed shadow'
-                                                                    : 'bg-red-600 hover:bg-red-700 text-white'
+                                                                        ? 'bg-amber-500 text-white opacity-95 cursor-not-allowed shadow'
+                                                                        : 'bg-red-600 hover:bg-red-700 text-white'
                                                                     }`}
                                                             >
                                                                 <CheckCircle size={12} /> {isConcluded ? 'Item Finalizado' : 'Finalizar Item'}

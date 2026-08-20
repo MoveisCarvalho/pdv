@@ -1,11 +1,10 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { Package, Plus, Trash2, Edit, ArrowLeft, Layers, Utensils } from 'lucide-react';
+import { Package, Plus, Trash2, Edit, ArrowLeft, Layers, Utensils, X, Tag } from 'lucide-react';
 import Link from 'next/link';
 import Tooltip from '@/src/components/Tooltip';
 import ThemeToggle from '@/src/components/ThemeToggle';
-
 interface Product {
     _id: string;
     name: string;
@@ -25,10 +24,17 @@ interface TableItem {
     name: string;
 }
 
+interface Addon {
+    _id: string;
+    name: string;
+    price: number;
+}
+
 export default function AdminPage() {
     const [products, setProducts] = useState<Product[]>([]);
     const [categories, setCategories] = useState<Category[]>([]);
     const [tables, setTables] = useState<TableItem[]>([]);
+    const [addons, setAddons] = useState<Addon[]>([]);
     const [loading, setLoading] = useState(true);
 
     // Form states (Product)
@@ -42,6 +48,10 @@ export default function AdminPage() {
     const [categoryInput, setCategoryInput] = useState('');
     const [isCategoryOpen, setIsCategoryOpen] = useState(false);
 
+    // Addon management states
+    const [newAddonName, setNewAddonName] = useState('');
+    const [newAddonPrice, setNewAddonPrice] = useState('');
+
     // Table registration state
     const [newTableName, setNewTableName] = useState('');
 
@@ -51,18 +61,21 @@ export default function AdminPage() {
 
     const fetchData = async () => {
         try {
-            const [prodRes, catRes, tabRes] = await Promise.all([
+            const [prodRes, catRes, tabRes, addonRes] = await Promise.all([
                 fetch('/api/products', { cache: 'no-store' }),
                 fetch('/api/categories', { cache: 'no-store' }),
-                fetch('/api/tables', { cache: 'no-store' })
+                fetch('/api/tables', { cache: 'no-store' }),
+                fetch('/api/addons', { cache: 'no-store' })
             ]);
             const prodJson = await prodRes.json();
             const catJson = await catRes.json();
             const tabJson = await tabRes.json();
+            const addonJson = await addonRes.json();
 
             if (prodJson.success) setProducts(prodJson.data);
             if (catJson.success) setCategories(catJson.data);
             if (tabJson.success) setTables(tabJson.data);
+            if (addonJson.success) setAddons(addonJson.data);
         } catch (error) {
             console.error('Erro ao buscar dados:', error);
         } finally {
@@ -113,6 +126,34 @@ export default function AdminPage() {
             }
         } catch (err) {
             console.error('Erro ao criar mesa:', err);
+        }
+    };
+
+    const handleAddAddon = async () => {
+        if (!newAddonName.trim() || !newAddonPrice) return;
+        try {
+            const res = await fetch('/api/addons', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ name: newAddonName.trim(), price: parseFloat(newAddonPrice) })
+            });
+            if (res.ok) {
+                setNewAddonName('');
+                setNewAddonPrice('');
+                fetchData();
+            }
+        } catch (error) {
+            console.error('Erro ao criar acréscimo:', error);
+        }
+    };
+
+    const handleDeleteAddon = async (id: string) => {
+        if (!confirm('Deseja excluir este acréscimo?')) return;
+        try {
+            const res = await fetch(`/api/addons/${id}`, { method: 'DELETE' });
+            if (res.ok) fetchData();
+        } catch (error) {
+            console.error('Erro ao excluir acréscimo:', error);
         }
     };
 
@@ -215,29 +256,30 @@ export default function AdminPage() {
 
     return (
         <div className="min-h-screen bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100 flex flex-col transition-colors duration-200">
-            <header className="bg-slate-900 text-white px-6 py-4 flex justify-between items-center shadow-md border-b border-slate-800">
-                <div className="flex items-center gap-4">
+            <header className="bg-slate-900 text-white px-6 py-4 flex flex-wrap justify-between items-center gap-3 shadow-md border-b border-slate-800">
+                <div className="flex items-center gap-4 flex-wrap">
                     <Link href="/" className="p-2 bg-slate-800 hover:bg-slate-700 rounded-xl transition-colors">
                         <ArrowLeft size={20} />
                     </Link>
                     <h1 className="text-xl font-bold flex items-center gap-2">
-                        <Package className="text-indigo-400" /> Painel Administrativo - Estoque, Categorias & Mesas
+                        <Package className="text-indigo-400" /> Painel Administrativo
                     </h1>
                 </div>
                 <div className="flex items-center gap-3">
                     <ThemeToggle />
                     <Tooltip text="Gestão completa do catálogo ativo">
-                        <span className="text-xs bg-indigo-500/20 text-indigo-400 border border-indigo-500/30 px-3 py-1 rounded-full font-medium">
+                        <span className="text-xs bg-indigo-500/20 text-indigo-400 border border-indigo-500/30 px-3 py-1 rounded-full font-medium whitespace-nowrap">
                             Painel Admin
                         </span>
                     </Tooltip>
                 </div>
             </header>
 
-            <main className="flex-1 max-w-7xl mx-auto w-full p-6 grid grid-cols-1 lg:grid-cols-3 gap-6">
+            <main className="flex-1 max-w-7xl mx-auto w-full p-4 sm:p-6 grid grid-cols-1 lg:grid-cols-3 gap-6">
+                {/* Coluna esquerda - Formulários */}
                 <div className="space-y-6">
                     {/* Formulário de Produto */}
-                    <div className="bg-white dark:bg-slate-900 p-6 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm h-fit">
+                    <div className="bg-white dark:bg-slate-900 p-4 sm:p-6 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm h-fit">
                         <h2 className="text-lg font-bold mb-4 flex items-center gap-2 text-slate-800 dark:text-slate-100">
                             <Plus size={20} className="text-indigo-600 dark:text-indigo-400" />
                             {editingId ? 'Editar Produto' : 'Novo Produto'}
@@ -254,7 +296,7 @@ export default function AdminPage() {
                                     className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:border-indigo-500"
                                 />
                             </div>
-                            <div className="grid grid-cols-2 gap-3">
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                                 <div>
                                     <label className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider block mb-1">Preço (R$)</label>
                                     <input
@@ -279,7 +321,7 @@ export default function AdminPage() {
                                     />
                                 </div>
                             </div>
-                            <div className="grid grid-cols-2 gap-3">
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                                 <div>
                                     <label className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider block mb-1">Estoque</label>
                                     <input
@@ -290,7 +332,6 @@ export default function AdminPage() {
                                         className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:border-indigo-500"
                                     />
                                 </div>
-
                                 <div className="relative">
                                     <label className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider block mb-1">Categoria</label>
                                     <input
@@ -305,7 +346,6 @@ export default function AdminPage() {
                                         placeholder="Ex: Lanches"
                                         className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:border-indigo-500"
                                     />
-
                                     {isCategoryOpen && filteredCategories.length > 0 && (
                                         <div className="absolute z-50 left-0 right-0 mt-1 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl shadow-xl max-h-40 overflow-y-auto">
                                             {filteredCategories.map((cat) => (
@@ -322,7 +362,7 @@ export default function AdminPage() {
                                 </div>
                             </div>
 
-                            <div className="flex gap-2 pt-2">
+                            <div className="flex flex-col sm:flex-row gap-2 pt-2">
                                 {editingId && (
                                     <button
                                         type="button"
@@ -342,20 +382,23 @@ export default function AdminPage() {
                         </form>
                     </div>
 
-                    {/* Gestão de Mesas */}
-                    <div className="bg-white dark:bg-slate-900 p-6 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm h-fit">
+                    {/* Gestão de Mesas - Responsivo corrigido */}
+                    <div className="bg-white dark:bg-slate-900 p-4 sm:p-6 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm h-fit">
                         <h3 className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-3 flex items-center gap-1.5">
                             <Utensils size={14} /> Gerenciar Mesas ({tables.length})
                         </h3>
-                        <form onSubmit={handleCreateTable} className="flex gap-2 mb-3">
+                        <form onSubmit={handleCreateTable} className="flex flex-wrap items-center gap-2 mb-3">
                             <input
                                 type="text"
                                 value={newTableName}
                                 onChange={(e) => setNewTableName(e.target.value)}
                                 placeholder="Ex: Mesa 06"
-                                className="flex-1 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-indigo-500"
+                                className="flex-1 min-w-[140px] bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-indigo-500"
                             />
-                            <button type="submit" className="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-xl text-xs font-bold">
+                            <button
+                                type="submit"
+                                className="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-xl text-xs font-bold whitespace-nowrap"
+                            >
                                 Adicionar
                             </button>
                         </form>
@@ -377,7 +420,7 @@ export default function AdminPage() {
                     </div>
 
                     {/* Gestão de Categorias */}
-                    <div className="bg-white dark:bg-slate-900 p-6 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm h-fit">
+                    <div className="bg-white dark:bg-slate-900 p-4 sm:p-6 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm h-fit">
                         <h3 className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-3 flex items-center gap-1.5">
                             <Layers size={14} /> Categorias Cadastradas ({categories.length})
                         </h3>
@@ -390,6 +433,52 @@ export default function AdminPage() {
                                         onClick={() => handleDeleteCategory(cat._id)}
                                         className="text-slate-400 hover:text-red-500 transition-colors ml-1"
                                         title="Excluir categoria"
+                                    >
+                                        <Trash2 size={12} />
+                                    </button>
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+
+                    {/* Gestão de Acréscimos - Responsivo corrigido */}
+                    <div className="bg-white dark:bg-slate-900 p-4 sm:p-6 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm h-fit">
+                        <h3 className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-3 flex items-center gap-1.5">
+                            <Tag size={14} /> Acréscimos / Extras ({addons.length})
+                        </h3>
+                        <div className="flex flex-wrap items-center gap-2 mb-3">
+                            <input
+                                type="text"
+                                value={newAddonName}
+                                onChange={(e) => setNewAddonName(e.target.value)}
+                                placeholder="Nome do extra"
+                                className="flex-1 min-w-[120px] bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-indigo-500"
+                            />
+                            <input
+                                type="number"
+                                step="0.01"
+                                value={newAddonPrice}
+                                onChange={(e) => setNewAddonPrice(e.target.value)}
+                                placeholder="Valor"
+                                className="w-24 min-w-[80px] bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-indigo-500"
+                            />
+                            <button
+                                type="button"
+                                onClick={handleAddAddon}
+                                className="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-xl text-xs font-bold whitespace-nowrap"
+                            >
+                                Adicionar
+                            </button>
+                        </div>
+                        <div className="flex flex-wrap gap-2 max-h-32 overflow-y-auto pr-1">
+                            {addons.map((a) => (
+                                <div key={a._id} className="flex items-center gap-1.5 bg-slate-100 dark:bg-slate-800 px-2.5 py-1 rounded-lg text-xs font-medium text-slate-700 dark:text-slate-300">
+                                    <span>{a.name} (R$ {a.price.toFixed(2)})</span>
+                                    <button
+                                        type="button"
+                                        onClick={() => handleDeleteAddon(a._id)}
+                                        className="text-slate-400 hover:text-red-500 transition-colors ml-1"
+                                        title="Excluir acréscimo"
                                     >
                                         <Trash2 size={12} />
                                     </button>
@@ -412,9 +501,9 @@ export default function AdminPage() {
                     ) : (
                         <div className="grid grid-cols-1 gap-3 overflow-y-auto max-h-[calc(100vh-220px)] pr-1">
                             {products.map((prod) => (
-                                <div key={prod._id} className="bg-white dark:bg-slate-900 p-4 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm flex justify-between items-center">
+                                <div key={prod._id} className="bg-white dark:bg-slate-900 p-4 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2">
                                     <div>
-                                        <div className="flex items-center gap-2 mb-1">
+                                        <div className="flex items-center gap-2 mb-1 flex-wrap">
                                             <h3 className="font-bold text-slate-800 dark:text-slate-100 text-base">{prod.name}</h3>
                                             <span className="text-[10px] uppercase px-2 py-0.5 rounded bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 font-semibold">
                                                 {prod.category || 'Geral'}
@@ -424,7 +513,6 @@ export default function AdminPage() {
                                             Preço: <span className="font-semibold text-indigo-600 dark:text-indigo-400">R$ {prod.price.toFixed(2)}</span> • Custo: R$ {(prod.cost || 0).toFixed(2)} • Estoque: {prod.stock || 0} un.
                                         </p>
                                     </div>
-
                                     <div className="flex items-center gap-2">
                                         <button
                                             onClick={() => handleEdit(prod)}

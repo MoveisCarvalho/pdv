@@ -61,7 +61,6 @@ export async function PATCH(
         } else {
             if (status) {
                 order.status = status;
-                // Se o pedido inteiro foi concluído, marca todos os itens da comanda como concluídos automaticamente
                 if (status === 'concluido') {
                     order.items.forEach((item: any) => {
                         item.status = 'concluido';
@@ -74,16 +73,13 @@ export async function PATCH(
             if (items && Array.isArray(items)) {
                 const existingItems = order.items || [];
 
-                // Mantém rigorosamente todos os itens que já estavam concluídos ou em preparo na cozinha
                 const activeOrCompletedItems = existingItems.filter(
                     (i: any) => i.status === 'concluido' || i.status === 'preparando'
                 );
 
                 const updatedItems: any[] = [...activeOrCompletedItems];
 
-                // Processa os itens vindos do carrinho atualizado
                 for (const cartItem of items) {
-                    // Calcula quantos já existem desse produto como 'concluido' ou 'preparando'
                     const completedOrPrepCount = activeOrCompletedItems
                         .filter((i: any) =>
                             (cartItem.productId && i.productId?.toString() === cartItem.productId?.toString()) ||
@@ -91,7 +87,6 @@ export async function PATCH(
                         )
                         .reduce((sum: number, i: any) => sum + i.quantity, 0);
 
-                    // Verifica se já existe um item pendente para atualizar a quantidade dele
                     const existingPendingIndex = existingItems.findIndex(
                         (i: any) =>
                             i.status === 'pendente' &&
@@ -112,16 +107,19 @@ export async function PATCH(
                                 name: existingPending.name,
                                 price: existingPending.price,
                                 quantity: neededPendingQuantity,
+                                addons: cartItem.addons || [],
+                                observation: cartItem.observation || '',
                                 status: 'pendente'
                             });
                         }
                     } else if (neededPendingQuantity > 0) {
-                        // Adiciona o novo item adicional como pendente na cozinha
                         updatedItems.push({
                             productId: cartItem.productId,
                             name: cartItem.name,
                             price: cartItem.price,
                             quantity: neededPendingQuantity,
+                            addons: cartItem.addons || [],
+                            observation: cartItem.observation || '',
                             status: 'pendente'
                         });
                     }
@@ -143,6 +141,8 @@ export async function PATCH(
                         name: newItem.name,
                         quantity: newItem.quantity,
                         price: newItem.price,
+                        addons: newItem.addons || [],
+                        observation: newItem.observation || '',
                         status: 'pendente'
                     });
                 }
@@ -156,6 +156,7 @@ export async function PATCH(
         await order.save();
         return NextResponse.json({ success: true, data: order }, { status: 200 });
     } catch (error: any) {
+        console.error('Erro no PATCH /orders/[id]:', error);
         return NextResponse.json({ success: false, error: error.message }, { status: 400 });
     }
 }

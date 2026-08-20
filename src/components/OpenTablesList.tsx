@@ -2,12 +2,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { Clock, Calendar, UtensilsCrossed, Edit3, XCircle } from 'lucide-react';
-
-interface OrderItem {
-    name: string;
-    quantity: number;
-    price: number;
-}
+import { OrderItem } from '@/src/types';
 
 interface OpenOrder {
     _id: string;
