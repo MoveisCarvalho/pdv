@@ -2,6 +2,7 @@ import mongoose, { Schema, models, model } from 'mongoose';
 
 const ProductSchema = new Schema({
     name: { type: String, required: true },
+    description: { type: String, default: '' }, // <--- CAMPO ADICIONADO AQUI
     sku: { type: String, unique: true, sparse: true },
     price: { type: Number, required: true },
     cost: { type: Number, required: true },

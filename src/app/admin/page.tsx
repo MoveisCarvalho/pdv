@@ -1,13 +1,15 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
-import { Package, Plus, Trash2, Edit, ArrowLeft, Layers, Utensils, X, Tag } from 'lucide-react';
+import React, { useState, useEffect, useRef } from 'react';
+import { Package, Plus, Trash2, Edit, ArrowLeft, Layers, Utensils, X, Tag, Loader2 } from 'lucide-react'; // <-- ADICIONADO Loader2
 import Link from 'next/link';
 import Tooltip from '@/src/components/Tooltip';
 import ThemeToggle from '@/src/components/ThemeToggle';
+
 interface Product {
     _id: string;
     name: string;
+    description?: string;
     price: number;
     cost: number;
     stock: number;
@@ -39,6 +41,7 @@ export default function AdminPage() {
 
     // Form states (Product)
     const [name, setName] = useState('');
+    const [description, setDescription] = useState('');
     const [price, setPrice] = useState('');
     const [cost, setCost] = useState('');
     const [stock, setStock] = useState('');
@@ -47,6 +50,36 @@ export default function AdminPage() {
     // Category Autocomplete states
     const [categoryInput, setCategoryInput] = useState('');
     const [isCategoryOpen, setIsCategoryOpen] = useState(false);
+
+    // Estado para expansão da descrição no Admin
+    const [expandedDesc, setExpandedDesc] = useState<Record<string, boolean>>({});
+    const toggleDesc = (id: string) => {
+        setExpandedDesc(prev => ({ ...prev, [id]: !prev[id] }));
+    };
+
+    // --- REF para o formulário e Função de Foco ---
+    const formSectionRef = useRef<HTMLDivElement>(null);
+
+    const scrollToForm = () => {
+        setTimeout(() => {
+            if (formSectionRef.current) {
+                formSectionRef.current.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                formSectionRef.current.classList.add(
+                    'ring-2', 'ring-indigo-500', 'ring-offset-2',
+                    'ring-offset-slate-100', 'dark:ring-offset-slate-950'
+                );
+                setTimeout(() => {
+                    formSectionRef.current?.classList.remove(
+                        'ring-2', 'ring-indigo-500', 'ring-offset-2',
+                        'ring-offset-slate-100', 'dark:ring-offset-slate-950'
+                    );
+                }, 2000);
+            }
+        }, 150);
+    };
+
+    // --- Estado de Processamento Global ---
+    const [isProcessing, setIsProcessing] = useState(false);
 
     // Addon management states
     const [newAddonName, setNewAddonName] = useState('');
@@ -113,6 +146,7 @@ export default function AdminPage() {
     const handleCreateTable = async (e: React.FormEvent) => {
         e.preventDefault();
         if (!newTableName.trim()) return;
+        setIsProcessing(true);
         try {
             const res = await fetch('/api/tables', {
                 method: 'POST',
@@ -126,11 +160,14 @@ export default function AdminPage() {
             }
         } catch (err) {
             console.error('Erro ao criar mesa:', err);
+        } finally {
+            setIsProcessing(false);
         }
     };
 
     const handleAddAddon = async () => {
         if (!newAddonName.trim() || !newAddonPrice) return;
+        setIsProcessing(true);
         try {
             const res = await fetch('/api/addons', {
                 method: 'POST',
@@ -144,16 +181,21 @@ export default function AdminPage() {
             }
         } catch (error) {
             console.error('Erro ao criar acréscimo:', error);
+        } finally {
+            setIsProcessing(false);
         }
     };
 
     const handleDeleteAddon = async (id: string) => {
         if (!confirm('Deseja excluir este acréscimo?')) return;
+        setIsProcessing(true);
         try {
             const res = await fetch(`/api/addons/${id}`, { method: 'DELETE' });
             if (res.ok) fetchData();
         } catch (error) {
             console.error('Erro ao excluir acréscimo:', error);
+        } finally {
+            setIsProcessing(false);
         }
     };
 
@@ -171,8 +213,10 @@ export default function AdminPage() {
             console.error(err);
         }
 
+        setIsProcessing(true);
         const payload = {
             name,
+            description,
             price: parseFloat(price),
             cost: parseFloat(cost || '0'),
             stock: parseInt(stock || '0'),
@@ -196,54 +240,68 @@ export default function AdminPage() {
             }
         } catch (error) {
             console.error('Erro ao salvar produto:', error);
+        } finally {
+            setIsProcessing(false);
         }
     };
 
     const handleEdit = (prod: Product) => {
         setEditingId(prod._id);
         setName(prod.name);
+        setDescription(prod.description || '');
         setPrice(prod.price.toString());
         setCost(prod.cost.toString());
         setStock(prod.stock.toString());
         setCategoryInput(prod.category || '');
+        scrollToForm();
     };
 
     const handleDeleteProduct = async (id: string) => {
         if (!confirm('Deseja realmente excluir este produto?')) return;
+        setIsProcessing(true);
         try {
             const res = await fetch(`/api/products/${id}`, { method: 'DELETE' });
             const json = await res.json();
             if (json.success) fetchData();
         } catch (error) {
             console.error('Erro ao excluir produto:', error);
+        } finally {
+            setIsProcessing(false);
         }
     };
 
     const handleDeleteCategory = async (id: string) => {
         if (!confirm('Deseja realmente excluir esta categoria?')) return;
+        setIsProcessing(true);
         try {
             const res = await fetch(`/api/categories/${id}`, { method: 'DELETE' });
             const json = await res.json();
             if (json.success) fetchData();
         } catch (error) {
             console.error('Erro ao excluir categoria:', error);
+        } finally {
+            setIsProcessing(false);
         }
     };
 
     const handleDeleteTable = async (id: string) => {
         if (!confirm('Deseja realmente excluir esta mesa?')) return;
+        setIsProcessing(true);
         try {
             const res = await fetch(`/api/tables/${id}`, { method: 'DELETE' });
             const json = await res.json();
             if (json.success) fetchData();
         } catch (error) {
             console.error('Erro ao excluir mesa:', error);
+        } finally {
+            setIsProcessing(false);
         }
     };
 
     const resetForm = () => {
         setEditingId(null);
         setName('');
+        setDescription('');
         setPrice('');
         setCost('');
         setStock('');
@@ -279,7 +337,10 @@ export default function AdminPage() {
                 {/* Coluna esquerda - Formulários */}
                 <div className="space-y-6">
                     {/* Formulário de Produto */}
-                    <div className="bg-white dark:bg-slate-900 p-4 sm:p-6 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm h-fit">
+                    <div
+                        ref={formSectionRef}
+                        className="bg-white dark:bg-slate-900 p-4 sm:p-6 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm h-fit transition-all duration-300"
+                    >
                         <h2 className="text-lg font-bold mb-4 flex items-center gap-2 text-slate-800 dark:text-slate-100">
                             <Plus size={20} className="text-indigo-600 dark:text-indigo-400" />
                             {editingId ? 'Editar Produto' : 'Novo Produto'}
@@ -296,6 +357,18 @@ export default function AdminPage() {
                                     className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:border-indigo-500"
                                 />
                             </div>
+
+                            <div>
+                                <label className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider block mb-1">Descrição do Item</label>
+                                <textarea
+                                    value={description}
+                                    onChange={(e) => setDescription(e.target.value)}
+                                    placeholder="Ex: Pão, hambúrguer, queijo, ovo, bacon, alface e tomate"
+                                    rows={3}
+                                    className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:border-indigo-500 resize-none"
+                                />
+                            </div>
+
                             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                                 <div>
                                     <label className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider block mb-1">Preço (R$)</label>
@@ -367,22 +440,28 @@ export default function AdminPage() {
                                     <button
                                         type="button"
                                         onClick={resetForm}
-                                        className="flex-1 bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-300 py-3 rounded-xl font-bold text-sm transition-colors"
+                                        disabled={isProcessing}
+                                        className="flex-1 bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-300 py-3 rounded-xl font-bold text-sm transition-colors disabled:opacity-50"
                                     >
                                         Cancelar
                                     </button>
                                 )}
                                 <button
                                     type="submit"
-                                    className="flex-1 bg-indigo-600 hover:bg-indigo-700 text-white py-3 rounded-xl font-bold text-sm transition-colors shadow-lg shadow-indigo-600/20"
+                                    disabled={isProcessing}
+                                    className="flex-1 bg-indigo-600 hover:bg-indigo-700 text-white py-3 rounded-xl font-bold text-sm transition-colors shadow-lg shadow-indigo-600/20 flex items-center justify-center gap-2 disabled:opacity-70"
                                 >
-                                    {editingId ? 'Salvar Alterações' : 'Cadastrar Produto'}
+                                    {isProcessing ? (
+                                        <><Loader2 className="animate-spin h-4 w-4" /> {editingId ? 'Salvando...' : 'Cadastrando...'}</>
+                                    ) : (
+                                        editingId ? 'Salvar Alterações' : 'Cadastrar Produto'
+                                    )}
                                 </button>
                             </div>
                         </form>
                     </div>
 
-                    {/* Gestão de Mesas - Responsivo corrigido */}
+                    {/* Gestão de Mesas */}
                     <div className="bg-white dark:bg-slate-900 p-4 sm:p-6 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm h-fit">
                         <h3 className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-3 flex items-center gap-1.5">
                             <Utensils size={14} /> Gerenciar Mesas ({tables.length})
@@ -394,12 +473,14 @@ export default function AdminPage() {
                                 onChange={(e) => setNewTableName(e.target.value)}
                                 placeholder="Ex: Mesa 06"
                                 className="flex-1 min-w-[140px] bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-indigo-500"
+                                disabled={isProcessing}
                             />
                             <button
                                 type="submit"
-                                className="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-xl text-xs font-bold whitespace-nowrap"
+                                disabled={isProcessing}
+                                className="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-xl text-xs font-bold whitespace-nowrap flex items-center justify-center gap-2 disabled:opacity-70"
                             >
-                                Adicionar
+                                {isProcessing ? <Loader2 className="animate-spin h-3 w-3" /> : 'Adicionar'}
                             </button>
                         </form>
                         <div className="flex flex-wrap gap-2 max-h-32 overflow-y-auto pr-1">
@@ -409,7 +490,8 @@ export default function AdminPage() {
                                     <button
                                         type="button"
                                         onClick={() => handleDeleteTable(t._id)}
-                                        className="text-slate-400 hover:text-red-500 transition-colors ml-1"
+                                        disabled={isProcessing}
+                                        className="text-slate-400 hover:text-red-500 transition-colors ml-1 disabled:opacity-50 disabled:cursor-not-allowed"
                                         title="Excluir mesa"
                                     >
                                         <Trash2 size={12} />
@@ -431,7 +513,8 @@ export default function AdminPage() {
                                     <button
                                         type="button"
                                         onClick={() => handleDeleteCategory(cat._id)}
-                                        className="text-slate-400 hover:text-red-500 transition-colors ml-1"
+                                        disabled={isProcessing}
+                                        className="text-slate-400 hover:text-red-500 transition-colors ml-1 disabled:opacity-50 disabled:cursor-not-allowed"
                                         title="Excluir categoria"
                                     >
                                         <Trash2 size={12} />
@@ -441,7 +524,7 @@ export default function AdminPage() {
                         </div>
                     </div>
 
-                    {/* Gestão de Acréscimos - Responsivo corrigido */}
+                    {/* Gestão de Acréscimos */}
                     <div className="bg-white dark:bg-slate-900 p-4 sm:p-6 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm h-fit">
                         <h3 className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-3 flex items-center gap-1.5">
                             <Tag size={14} /> Acréscimos / Extras ({addons.length})
@@ -453,6 +536,7 @@ export default function AdminPage() {
                                 onChange={(e) => setNewAddonName(e.target.value)}
                                 placeholder="Nome do extra"
                                 className="flex-1 min-w-[120px] bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-indigo-500"
+                                disabled={isProcessing}
                             />
                             <input
                                 type="number"
@@ -461,13 +545,15 @@ export default function AdminPage() {
                                 onChange={(e) => setNewAddonPrice(e.target.value)}
                                 placeholder="Valor"
                                 className="w-24 min-w-[80px] bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-indigo-500"
+                                disabled={isProcessing}
                             />
                             <button
                                 type="button"
                                 onClick={handleAddAddon}
-                                className="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-xl text-xs font-bold whitespace-nowrap"
+                                disabled={isProcessing}
+                                className="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-xl text-xs font-bold whitespace-nowrap flex items-center justify-center gap-2 disabled:opacity-70"
                             >
-                                Adicionar
+                                {isProcessing ? <Loader2 className="animate-spin h-3 w-3" /> : 'Adicionar'}
                             </button>
                         </div>
                         <div className="flex flex-wrap gap-2 max-h-32 overflow-y-auto pr-1">
@@ -477,7 +563,8 @@ export default function AdminPage() {
                                     <button
                                         type="button"
                                         onClick={() => handleDeleteAddon(a._id)}
-                                        className="text-slate-400 hover:text-red-500 transition-colors ml-1"
+                                        disabled={isProcessing}
+                                        className="text-slate-400 hover:text-red-500 transition-colors ml-1 disabled:opacity-50 disabled:cursor-not-allowed"
                                         title="Excluir acréscimo"
                                     >
                                         <Trash2 size={12} />
@@ -502,28 +589,46 @@ export default function AdminPage() {
                         <div className="grid grid-cols-1 gap-3 overflow-y-auto max-h-[calc(100vh-220px)] pr-1">
                             {products.map((prod) => (
                                 <div key={prod._id} className="bg-white dark:bg-slate-900 p-4 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2">
-                                    <div>
+                                    <div className="w-full sm:w-auto">
                                         <div className="flex items-center gap-2 mb-1 flex-wrap">
                                             <h3 className="font-bold text-slate-800 dark:text-slate-100 text-base">{prod.name}</h3>
-                                            <span className="text-[10px] uppercase px-2 py-0.5 rounded bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 font-semibold">
-                                                {prod.category || 'Geral'}
-                                            </span>
                                         </div>
-                                        <p className="text-xs text-slate-400">
-                                            Preço: <span className="font-semibold text-indigo-600 dark:text-indigo-400">R$ {prod.price.toFixed(2)}</span> • Custo: R$ {(prod.cost || 0).toFixed(2)} • Estoque: {prod.stock || 0} un.
-                                        </p>
+                                        <div
+                                            className="text-xs text-slate-500 dark:text-slate-400 mt-1 cursor-pointer w-full"
+                                            onClick={() => toggleDesc(prod._id)}
+                                        >
+                                            {prod.description ? (
+                                                expandedDesc[prod._id] ? (
+                                                    <span>{prod.description}</span>
+                                                ) : (
+                                                    <span>
+                                                        {prod.description.length > 50 ? prod.description.substring(0, 50) + '...' : prod.description}
+                                                        {prod.description.length > 50 && <span className="text-indigo-500 hover:underline ml-1">(mais)</span>}
+                                                    </span>
+                                                )
+                                            ) : (
+                                                <span className="italic opacity-60">Sem descrição cadastrada</span>
+                                            )}
+                                        </div>
+                                        <div className="flex items-start gap-2 flex-wrap mt-1">
+                                            <p className="text-xs text-slate-400">
+                                                Preço: <span className="font-semibold text-indigo-600 dark:text-indigo-400">R$ {prod.price.toFixed(2)}</span> • Custo: R$ {(prod.cost || 0).toFixed(2)} • Estoque: {prod.stock || 0} un.
+                                            </p>
+                                        </div>
                                     </div>
-                                    <div className="flex items-center gap-2">
+                                    <div className="flex items-center gap-2 shrink-0">
                                         <button
                                             onClick={() => handleEdit(prod)}
-                                            className="p-2 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-300 rounded-xl transition-colors"
+                                            disabled={isProcessing}
+                                            className="p-2 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-300 rounded-xl transition-colors disabled:opacity-50"
                                             title="Editar"
                                         >
                                             <Edit size={16} />
                                         </button>
                                         <button
                                             onClick={() => handleDeleteProduct(prod._id)}
-                                            className="p-2 bg-red-50 dark:bg-red-950/50 hover:bg-red-100 dark:hover:bg-red-900 text-red-600 dark:text-red-400 rounded-xl transition-colors"
+                                            disabled={isProcessing}
+                                            className="p-2 bg-red-50 dark:bg-red-950/50 hover:bg-red-100 dark:hover:bg-red-900 text-red-600 dark:text-red-400 rounded-xl transition-colors disabled:opacity-50"
                                             title="Excluir"
                                         >
                                             <Trash2 size={16} />

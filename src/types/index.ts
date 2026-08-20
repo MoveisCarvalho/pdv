@@ -9,6 +9,7 @@ export interface Addon {
 export interface Product {
     _id: string;
     name: string;
+    description?: string; // <-- NOVO CAMPO OPCIONAL
     price: number;
     stock: number;
     category: string;

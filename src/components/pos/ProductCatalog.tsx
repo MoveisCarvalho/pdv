@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { Search, Plus } from 'lucide-react';
 import AddItemModal from './AddItemModal';
 import { Product } from '@/src/types';
+
 interface ProductCatalogProps {
     products: Product[];
     loading: boolean;
@@ -19,6 +20,13 @@ export default function ProductCatalog({
 }: ProductCatalogProps) {
     const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
     const [modalOpen, setModalOpen] = useState(false);
+
+    // Estado para expansão da descrição no Catálogo (Evita conflitos de clique)
+    const [expandedDesc, setExpandedDesc] = useState<Record<string, boolean>>({});
+    const toggleDesc = (id: string, e: React.MouseEvent) => {
+        e.stopPropagation(); // Evita abrir o modal de adição ao clicar na descrição
+        setExpandedDesc(prev => ({ ...prev, [id]: !prev[id] }));
+    };
 
     const handleProductClick = (product: Product) => {
         setSelectedProduct(product);
@@ -112,7 +120,25 @@ export default function ProductCatalog({
                                                 <h3 className="font-semibold text-slate-800 dark:text-slate-100 group-hover:text-indigo-600 text-xs line-clamp-2">
                                                     {prod.name}
                                                 </h3>
-                                                <span className="text-[9px] text-slate-400">{prod.category || 'Geral'}</span>
+
+                                                {/* Substituindo a visualização da categoria pela descrição truncada com clique */}
+                                                <div
+                                                    className="text-[9px] text-slate-500 dark:text-slate-400 mt-0.5 text-left cursor-pointer"
+                                                    onClick={(e) => toggleDesc(prod._id, e)}
+                                                >
+                                                    {prod.description ? (
+                                                        expandedDesc[prod._id] ? (
+                                                            <span>{prod.description}</span>
+                                                        ) : (
+                                                            <span>
+                                                                {prod.description.length > 40 ? prod.description.substring(0, 40) + '...' : prod.description}
+                                                                {prod.description.length > 40 && <span className="text-indigo-500 ml-1">(mais)</span>}
+                                                            </span>
+                                                        )
+                                                    ) : (
+                                                        <span className="italic opacity-50">Sem descrição</span>
+                                                    )}
+                                                </div>
                                             </div>
                                             <div className="mt-2 flex justify-between items-center w-full">
                                                 <span className="font-bold text-indigo-600 dark:text-indigo-400 text-xs">
