@@ -18,7 +18,7 @@ export async function POST(request: Request) {
     try {
         await dbConnect();
         const body = await request.json();
-        const { table, items, total, paymentMethod, status } = body;
+        const { table, customerName, items, total, paymentMethod, status } = body; // <-- adicionado customerName
 
         if (table) {
             const normalizedTable = table.toLowerCase().trim();
@@ -58,6 +58,7 @@ export async function POST(request: Request) {
 
         const order = await Order.create({
             table,
+            customerName, // <-- salva o nome do cliente
             items: preparedItems,
             total,
             paymentMethod: paymentMethod || 'pendente',

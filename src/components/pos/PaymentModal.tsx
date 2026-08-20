@@ -1,5 +1,5 @@
 import React from 'react';
-import { CheckCircle2, DollarSign, QrCode, CreditCard } from 'lucide-react';
+import { CheckCircle2, DollarSign, QrCode, CreditCard, Loader2 } from 'lucide-react';
 
 interface PaymentModalProps {
     isOpen: boolean;
@@ -12,6 +12,7 @@ interface PaymentModalProps {
     dynamicPixPayload: string;
     onClose: () => void;
     onConfirm: () => void;
+    isProcessing: boolean;
 }
 
 export default function PaymentModal({
@@ -25,6 +26,7 @@ export default function PaymentModal({
     dynamicPixPayload,
     onClose,
     onConfirm,
+    isProcessing,
 }: PaymentModalProps) {
     if (!isOpen) return null;
 
@@ -35,7 +37,7 @@ export default function PaymentModal({
                     <h3 className="text-base font-bold text-slate-900 dark:text-white flex items-center gap-2">
                         <CheckCircle2 className="text-indigo-500" /> Finalizar Pagamento ({selectedTable})
                     </h3>
-                    <span className="text-sm font-extrabold text-emerald-600 dark:text-emerald-400">
+                    <span className="text-xl font-extrabold text-emerald-600 dark:text-emerald-400"> {/* <-- Fonte maior */}
                         Total: R$ {totalCart.toFixed(2)}
                     </span>
                 </div>
@@ -57,10 +59,11 @@ export default function PaymentModal({
                                     key={m.id}
                                     type="button"
                                     onClick={() => setModalPaymentMethod(m.id as any)}
+                                    disabled={isProcessing}
                                     className={`py-2 px-1 rounded-xl text-xs font-semibold border flex flex-col items-center justify-center gap-1 transition-all ${modalPaymentMethod === m.id
-                                            ? 'bg-indigo-600 text-white border-indigo-600 shadow-md'
-                                            : 'bg-slate-50 dark:bg-slate-950 border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-400 hover:border-indigo-500'
-                                        }`}
+                                        ? 'bg-indigo-600 text-white border-indigo-600 shadow-md'
+                                        : 'bg-slate-50 dark:bg-slate-950 border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-400 hover:border-indigo-500'
+                                        } ${isProcessing ? 'opacity-50 cursor-not-allowed' : ''}`}
                                 >
                                     <Icon size={16} /> {m.label}
                                 </button>
@@ -82,19 +85,20 @@ export default function PaymentModal({
                                     value={amountReceived}
                                     onChange={(e) => setAmountReceived(e.target.value)}
                                     placeholder="0.00"
-                                    className="w-full bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl px-3 py-2 text-sm font-bold text-slate-900 dark:text-white focus:outline-none focus:border-indigo-500"
+                                    disabled={isProcessing}
+                                    className="w-full bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl px-3 py-3 text-xl font-bold text-slate-900 dark:text-white focus:outline-none focus:border-indigo-500 disabled:opacity-50" // <-- Fonte maior (text-xl) e padding maior
                                     autoFocus
                                 />
                             </div>
                             <div className="flex justify-between items-center pt-2 border-t border-slate-200 dark:border-slate-800">
-                                <span className="text-xs font-semibold text-slate-600 dark:text-slate-400">
+                                <span className="text-sm font-semibold text-slate-600 dark:text-slate-400"> {/* <-- Fonte maior */}
                                     Troco a devolver:
                                 </span>
                                 <span
-                                    className={`text-base font-black ${Number(amountReceived) >= totalCart
-                                            ? 'text-emerald-600 dark:text-emerald-400'
-                                            : 'text-red-500'
-                                        }`}
+                                    className={`text-2xl font-black ${Number(amountReceived) >= totalCart
+                                        ? 'text-emerald-600 dark:text-emerald-400'
+                                        : 'text-red-500'
+                                        }`} // <-- Fonte ainda maior
                                 >
                                     R$ {Math.max(0, Number(amountReceived) - totalCart).toFixed(2)}
                                 </span>
@@ -129,7 +133,8 @@ export default function PaymentModal({
                                         navigator.clipboard.writeText(dynamicPixPayload);
                                         alert('Código Pix copiado para a área de transferência!');
                                     }}
-                                    className="bg-indigo-600 hover:bg-indigo-700 text-white px-3 py-1 rounded-lg text-xs font-bold shrink-0 transition-colors"
+                                    disabled={isProcessing}
+                                    className="bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white px-3 py-1 rounded-lg text-xs font-bold shrink-0 transition-colors"
                                 >
                                     Copiar
                                 </button>
@@ -154,17 +159,30 @@ export default function PaymentModal({
                     <button
                         type="button"
                         onClick={onClose}
-                        className="bg-slate-200 dark:bg-slate-800 hover:bg-slate-300 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 px-4 py-2.5 rounded-xl text-xs font-bold transition-colors"
+                        disabled={isProcessing}
+                        className="bg-slate-200 dark:bg-slate-800 hover:bg-slate-300 dark:hover:bg-slate-700 disabled:opacity-50 text-slate-700 dark:text-slate-300 px-4 py-2.5 rounded-xl text-xs font-bold transition-colors"
                     >
                         Voltar
                     </button>
                     <button
                         type="button"
                         onClick={onConfirm}
-                        disabled={modalPaymentMethod === 'dinheiro' && Number(amountReceived) < totalCart}
+                        disabled={
+                            isProcessing ||
+                            (modalPaymentMethod === 'dinheiro' && Number(amountReceived) < totalCart)
+                        }
                         className="bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white px-5 py-2.5 rounded-xl text-xs font-bold transition-colors shadow-lg shadow-emerald-600/20 flex items-center gap-1.5"
                     >
-                        <CheckCircle2 size={15} /> Confirmar Recebimento & Fechar Conta
+                        {isProcessing ? (
+                            <>
+                                <Loader2 className="animate-spin h-4 w-4" />
+                                Processando...
+                            </>
+                        ) : (
+                            <>
+                                <CheckCircle2 size={15} /> Confirmar Recebimento & Fechar Conta
+                            </>
+                        )}
                     </button>
                 </div>
             </div>

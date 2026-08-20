@@ -7,6 +7,7 @@ import { OrderItem } from '@/src/types';
 interface OpenOrder {
     _id: string;
     table: string;
+    customerName?: string; // <-- NOVO
     items: OrderItem[];
     total: number;
     status: string;
@@ -17,9 +18,10 @@ interface OpenTablesListProps {
     onRefresh: () => void;
     onSelectOpenOrder?: (order: OpenOrder) => void;
     onUpdateOpenTables?: (tables: string[]) => void;
+    onUpdateOrders?: (orders: OpenOrder[]) => void; // <-- NOVO
 }
 
-export default function OpenTablesList({ onRefresh, onSelectOpenOrder, onUpdateOpenTables }: OpenTablesListProps) {
+export default function OpenTablesList({ onRefresh, onSelectOpenOrder, onUpdateOpenTables, onUpdateOrders }: OpenTablesListProps) {
     const [openOrders, setOpenOrders] = useState<OpenOrder[]>([]);
     const [loading, setLoading] = useState(true);
 
@@ -37,6 +39,9 @@ export default function OpenTablesList({ onRefresh, onSelectOpenOrder, onUpdateO
                 setOpenOrders(active);
                 if (onUpdateOpenTables) {
                     onUpdateOpenTables(active.map((o: OpenOrder) => o.table));
+                }
+                if (onUpdateOrders) {
+                    onUpdateOrders(active); // <-- passa a lista completa para o pai
                 }
             }
         } catch (err) {
@@ -106,6 +111,9 @@ export default function OpenTablesList({ onRefresh, onSelectOpenOrder, onUpdateO
                     const formattedDate = dateObj.toLocaleDateString('pt-BR');
                     const formattedTime = dateObj.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
 
+                    // Monta o identificador com o nome do cliente, se houver
+                    const displayName = order.customerName ? `${order.table} - ${order.customerName}` : order.table;
+
                     return (
                         <div key={order._id} className="bg-slate-50 dark:bg-slate-950 border border-amber-500/30 rounded-xl p-3 flex flex-col justify-between shadow-2xs">
                             <div>
@@ -116,11 +124,11 @@ export default function OpenTablesList({ onRefresh, onSelectOpenOrder, onUpdateO
                                             className="font-extrabold text-xs bg-amber-100 dark:bg-amber-950/60 text-amber-800 dark:text-amber-400 px-2.5 py-1 rounded-lg border border-amber-500/30 hover:bg-amber-200 dark:hover:bg-amber-900 transition-colors cursor-pointer text-left truncate max-w-[110px]"
                                             title="Clique para editar"
                                         >
-                                            {order.table}
+                                            {displayName}
                                         </button>
                                     ) : (
                                         <span className="font-extrabold text-xs bg-amber-100 dark:bg-amber-950/60 text-amber-800 dark:text-amber-400 px-2.5 py-1 rounded-lg border border-amber-500/30 truncate max-w-[110px]">
-                                            {order.table}
+                                            {displayName}
                                         </span>
                                     )}
                                     <div className="flex items-center gap-1.5 text-[10px] text-slate-400 font-medium">
@@ -129,7 +137,6 @@ export default function OpenTablesList({ onRefresh, onSelectOpenOrder, onUpdateO
                                     </div>
                                 </div>
 
-                                {/* Lista de itens limpa e com bom wrap para evitar estouros */}
                                 <div className="space-y-1 my-2 max-h-24 overflow-y-auto pr-1 text-[11px] text-slate-600 dark:text-slate-300">
                                     {order.items.map((item, idx) => (
                                         <div key={idx} className="flex justify-between items-center gap-2 bg-slate-100/50 dark:bg-slate-900/50 px-2 py-0.5 rounded-md">
@@ -168,7 +175,7 @@ export default function OpenTablesList({ onRefresh, onSelectOpenOrder, onUpdateO
                 })}
             </div>
 
-            {/* Modal de Cancelamento */}
+            {/* Modal de Cancelamento (mesmo código) */}
             {isCancelModalOpen && (
                 <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 backdrop-blur-xs p-4">
                     <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl w-full max-w-md p-6 shadow-2xl">

@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useEffect, useRef } from 'react';
-import { ShoppingCart, ArrowLeft } from 'lucide-react';
+import { ShoppingCart, ArrowLeft, X } from 'lucide-react';
 import Link from 'next/link';
 import Tooltip from '@/src/components/Tooltip';
 import ThemeToggle from '@/src/components/ThemeToggle';
@@ -14,16 +14,29 @@ import PaymentModal from '@/src/components/pos/PaymentModal';
 import AddItemModal from '@/src/components/pos/AddItemModal';
 import { Addon, Product, CartItem } from '@/src/types';
 
+// Definição local de OpenOrder para uso
+interface OpenOrder {
+    _id: string;
+    table: string;
+    customerName?: string;
+    items: any[];
+    total: number;
+    status: string;
+    createdAt: string;
+}
+
 export default function POSPage() {
     const [products, setProducts] = useState<Product[]>([]);
     const [allAddons, setAllAddons] = useState<Addon[]>([]);
     const [availableTables, setAvailableTables] = useState<string[]>([]);
     const [openOrdersMap, setOpenOrdersMap] = useState<string[]>([]);
+    const [openOrders, setOpenOrders] = useState<OpenOrder[]>([]);
     const [cart, setCart] = useState<CartItem[]>([]);
     const [selectedTable, setSelectedTable] = useState('');
+    const [customerName, setCustomerName] = useState('');
     const [currentOpenOrderId, setCurrentOpenOrderId] = useState<string | null>(null);
     const [loading, setLoading] = useState(true);
-    const [isProcessing, setIsProcessing] = useState(false); // <-- ADICIONE ESTA LINHA
+    const [isProcessing, setIsProcessing] = useState(false);
 
     const [isPaymentModalOpen, setIsPaymentModalOpen] = useState(false);
     const [modalPaymentMethod, setModalPaymentMethod] = useState<'dinheiro' | 'pix' | 'credito' | 'debito'>('dinheiro');
@@ -36,7 +49,11 @@ export default function POSPage() {
     const [editingItem, setEditingItem] = useState<CartItem | null>(null);
     const [isEditModalOpen, setIsEditModalOpen] = useState(false);
 
-    // REF para a seção do carrinho (para forçar o foco/scroll no celular)
+    // Estados para o modal de nome do cliente
+    const [isCustomerNameModalOpen, setIsCustomerNameModalOpen] = useState(false);
+    const [tempCustomerName, setTempCustomerName] = useState('');
+
+    // REF para a seção do carrinho
     const cartSectionRef = useRef<HTMLDivElement>(null);
 
     useEffect(() => {
@@ -73,32 +90,76 @@ export default function POSPage() {
         }
     };
 
-    const handleTableChange = (tableName: string) => {
-        const normalizedTable = tableName.toLowerCase().trim();
-        const isBalcaoOrDelivery =
-            normalizedTable.includes('balcão') ||
-            normalizedTable.includes('balcao') ||
-            normalizedTable.includes('viagem') ||
-            normalizedTable.includes('delivery');
+    // Handler para receber a lista completa de comandas abertas do OpenTablesList
+    const handleUpdateOrders = (orders: OpenOrder[]) => {
+        setOpenOrders(orders);
+    };
 
-        if (!isBalcaoOrDelivery && openOrdersMap.includes(tableName)) {
-            alert(`Atenção: A ${tableName} já possui uma comanda em aberto! Selecione-a na lista de comandas abertas para gerenciar.`);
+    // Função auxiliar para verificar se é Balcão/Viagem/Delivery
+    const isBalcaoOrDelivery = (tableName: string) => {
+        const normalized = tableName.toLowerCase().trim();
+        return (
+            normalized.includes('balcão') ||
+            normalized.includes('balcao') ||
+            normalized.includes('viagem') ||
+            normalized.includes('delivery')
+        );
+    };
+
+    const handleTableChange = (tableName: string) => {
+        // Primeiro, verifica se é Balcão/Viagem/Delivery (sempre nova comanda)
+        if (isBalcaoOrDelivery(tableName)) {
+            // Limpa tudo antes de abrir o modal para evitar lixo
+            setCart([]);
+            setCurrentOpenOrderId(null);
+            setCustomerName('');
+            setSelectedTable(tableName);
+            setTempCustomerName('');
+            setIsCustomerNameModalOpen(true);
             return;
         }
 
+        // Para mesas normais: verifica se já existe comanda aberta
+        const existingOrder = openOrders.find(o => o.table === tableName);
+
+        if (existingOrder) {
+            // Se existe, carrega a comanda (substitui o carrinho)
+            handleSelectOpenOrder(existingOrder);
+            return;
+        }
+
+        // Mesa livre: inicia nova comanda
+        // Limpa tudo antes de abrir o modal
+        setCart([]);
+        setCurrentOpenOrderId(null);
+        setCustomerName('');
         setSelectedTable(tableName);
+        setTempCustomerName('');
+        setIsCustomerNameModalOpen(true);
+    };
+
+    const handleCustomerNameConfirm = () => {
+        const name = tempCustomerName.trim();
+        setCustomerName(name);
+        setIsCustomerNameModalOpen(false);
+        // O carrinho já foi limpo no handleTableChange, mas garantimos:
+        setCurrentOpenOrderId(null);
+        setCart([]);
+        focusAndHighlightCart();
+    };
+
+    const handleCustomerNameCancel = () => {
+        setIsCustomerNameModalOpen(false);
+        // Ao cancelar, garantimos que não fique lixo
+        setCustomerName('');
         setCurrentOpenOrderId(null);
         setCart([]);
     };
 
-    // --- FUNÇÃO AUXILIAR DE FOCO NO CARRINHO ---
     const focusAndHighlightCart = () => {
         setTimeout(() => {
             if (cartSectionRef.current) {
-                // 1. Rola a tela centralizando o carrinho no meio da tela do celular
                 cartSectionRef.current.scrollIntoView({ behavior: 'smooth', block: 'center' });
-
-                // 2. Adiciona um brilho temporário no carrinho para o usuário saber onde está
                 cartSectionRef.current.classList.add(
                     'ring-2', 'ring-indigo-500', 'ring-offset-2',
                     'ring-offset-slate-100', 'dark:ring-offset-slate-950'
@@ -108,9 +169,9 @@ export default function POSPage() {
                         'ring-2', 'ring-indigo-500', 'ring-offset-2',
                         'ring-offset-slate-100', 'dark:ring-offset-slate-950'
                     );
-                }, 2000); // Remove o brilho após 2 segundos
+                }, 2000);
             }
-        }, 150); // Pequeno delay para garantir que o React renderizou os itens
+        }, 150);
     };
 
     const addToCart = (product: Product, selectedAddonIds: string[], observation: string) => {
@@ -133,7 +194,6 @@ export default function POSPage() {
             return [...prev, newItem];
         });
 
-        // Aplica o foco e destaque no carrinho
         focusAndHighlightCart();
     };
 
@@ -156,8 +216,9 @@ export default function POSPage() {
         );
     };
 
-    const handleSelectOpenOrder = (order: any) => {
+    const handleSelectOpenOrder = (order: OpenOrder) => {
         setSelectedTable(order.table);
+        setCustomerName(order.customerName || '');
         setCurrentOpenOrderId(order._id);
         const mappedCart: CartItem[] = order.items.map((i: any) => {
             const prod = products.find(p => p._id === i.productId || p.name === i.name);
@@ -175,8 +236,6 @@ export default function POSPage() {
             };
         });
         setCart(mappedCart);
-
-        // Aplica o foco e destaque no carrinho
         focusAndHighlightCart();
     };
 
@@ -222,7 +281,7 @@ export default function POSPage() {
         if (cart.length === 0) return;
         if (keepOpen && currentOpenOrderId && addedItems.length === 0) return;
 
-        setIsProcessing(true); // <-- BLOQUEIA OS BOTÕES NO INÍCIO
+        setIsProcessing(true);
 
         try {
             const url = currentOpenOrderId ? `/api/orders/${currentOpenOrderId}` : '/api/orders';
@@ -240,9 +299,11 @@ export default function POSPage() {
                 total: totalCart,
                 status: keepOpen ? 'aberto' : 'pago',
                 paymentMethod: keepOpen ? 'pendente' : chosenPaymentMethod,
-                newItems: addedItems
+                newItems: addedItems,
+                customerName,
             } : {
                 table: selectedTable,
+                customerName,
                 items: cart.map((i) => ({
                     productId: i._id,
                     name: i.name,
@@ -266,6 +327,9 @@ export default function POSPage() {
             if (json.success) {
                 setCart([]);
                 setCurrentOpenOrderId(null);
+                if (!keepOpen) {
+                    setCustomerName('');
+                }
                 setIsPaymentModalOpen(false);
                 setAmountReceived('');
                 setRefreshKey((prev) => prev + 1);
@@ -275,7 +339,7 @@ export default function POSPage() {
         } catch (error) {
             console.error('Erro ao finalizar venda:', error);
         } finally {
-            setIsProcessing(false); // <-- DESBLOQUEIA OS BOTÕES NO FINAL (mesmo dando erro!)
+            setIsProcessing(false);
         }
     };
 
@@ -297,7 +361,6 @@ export default function POSPage() {
         handleCheckout(false, modalPaymentMethod);
     };
 
-    // Funções para editar item
     const handleEditItem = (item: CartItem) => {
         setEditingItem(item);
         setIsEditModalOpen(true);
@@ -322,6 +385,9 @@ export default function POSPage() {
         setIsEditModalOpen(false);
         setEditingItem(null);
     };
+
+    // Identificador para exibição no carrinho
+    const displayTable = customerName ? `${selectedTable} - ${customerName}` : selectedTable;
 
     return (
         <div className="min-h-screen lg:h-screen bg-slate-100 dark:bg-slate-950 text-slate-900 dark:text-slate-100 flex flex-col overflow-x-hidden lg:overflow-hidden transition-colors duration-200">
@@ -363,14 +429,13 @@ export default function POSPage() {
                     />
                 </div>
 
-                {/* AQUI ADICIONAMOS O REF */}
                 <div
                     id="cart-section"
                     ref={cartSectionRef}
                     className="lg:col-span-3 flex flex-col min-h-0 transition-all duration-300 rounded-xl"
                 >
                     <CartPanel
-                        selectedTable={selectedTable}
+                        selectedTable={displayTable}
                         currentOpenOrderId={currentOpenOrderId}
                         cart={cart}
                         totalCart={totalCart}
@@ -380,7 +445,7 @@ export default function POSPage() {
                         onSendToKitchen={() => handleCheckout(true)}
                         onOpenPaymentModal={handleOpenPaymentModal}
                         onEditItem={handleEditItem}
-                        isProcessing={isProcessing} // <-- PASSE A PROP AQUI
+                        isProcessing={isProcessing}
                     />
                 </div>
 
@@ -396,10 +461,60 @@ export default function POSPage() {
                             onRefresh={() => setRefreshKey((prev) => prev + 1)}
                             onSelectOpenOrder={handleSelectOpenOrder}
                             onUpdateOpenTables={(tables) => setOpenOrdersMap(tables)}
+                            onUpdateOrders={handleUpdateOrders}
                         />
                     </div>
                 </div>
             </div>
+
+            {/* Modal para inserir nome do cliente */}
+            {isCustomerNameModalOpen && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 backdrop-blur-xs p-4">
+                    <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl w-full max-w-md p-6 shadow-2xl">
+                        <div className="flex justify-between items-center mb-4">
+                            <h3 className="text-base font-bold text-slate-900 dark:text-white flex items-center gap-2">
+                                Identificar Cliente
+                            </h3>
+                            <button
+                                onClick={handleCustomerNameCancel}
+                                className="p-1 rounded-full hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors"
+                            >
+                                <X size={20} />
+                            </button>
+                        </div>
+                        <p className="text-xs text-slate-500 dark:text-slate-400 mb-3">
+                            Digite um nome ou identificador para esta comanda (ex: “João”, “Balcão - Maria”).
+                        </p>
+                        <input
+                            type="text"
+                            value={tempCustomerName}
+                            onChange={(e) => setTempCustomerName(e.target.value)}
+                            placeholder="Ex: João Silva"
+                            className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-300 dark:border-slate-700 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:border-indigo-500 mb-4"
+                            autoFocus
+                            onKeyDown={(e) => {
+                                if (e.key === 'Enter') handleCustomerNameConfirm();
+                            }}
+                        />
+                        <div className="flex justify-end gap-2">
+                            <button
+                                type="button"
+                                onClick={handleCustomerNameCancel}
+                                className="bg-slate-200 dark:bg-slate-800 hover:bg-slate-300 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 px-4 py-2 rounded-xl text-xs font-bold transition-colors"
+                            >
+                                Cancelar
+                            </button>
+                            <button
+                                type="button"
+                                onClick={handleCustomerNameConfirm}
+                                className="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-xl text-xs font-bold transition-colors shadow-lg shadow-indigo-600/20"
+                            >
+                                Iniciar Comanda
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
 
             <PaymentModal
                 isOpen={isPaymentModalOpen}
@@ -412,6 +527,7 @@ export default function POSPage() {
                 dynamicPixPayload={dynamicPixPayload}
                 onClose={() => setIsPaymentModalOpen(false)}
                 onConfirm={handleConfirmPaymentModal}
+                isProcessing={isProcessing}
             />
 
             <AddItemModal

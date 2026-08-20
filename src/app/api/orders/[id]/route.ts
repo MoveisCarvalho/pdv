@@ -14,7 +14,7 @@ export async function PATCH(
         const id = resolvedParams.id;
 
         const body = await request.json();
-        const { status, cancellationReason, cancelledBy, paymentMethod, total, items, newItems, itemId, itemStatus } = body;
+        const { status, cancellationReason, cancelledBy, paymentMethod, total, items, newItems, itemId, itemStatus, customerName } = body; // <-- adicionado customerName
 
         // Se a requisição for para atualizar o status de um item específico do KDS
         if (itemId && itemStatus) {
@@ -68,6 +68,7 @@ export async function PATCH(
                 }
             }
             if (paymentMethod) order.paymentMethod = paymentMethod;
+            if (customerName) order.customerName = customerName; // <-- atualiza se enviado
 
             // 1. Suporte caso o frontend envie a lista completa de itens (reconciliação inteligente)
             if (items && Array.isArray(items)) {

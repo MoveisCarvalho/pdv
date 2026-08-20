@@ -20,6 +20,7 @@ export interface IOrderItem {
 // Interface principal do pedido
 export interface IOrder extends Document {
     table: string;
+    customerName?: string;    // <-- NOVO campo
     items: IOrderItem[];
     total: number;
     paymentMethod: string;
@@ -55,6 +56,7 @@ const OrderItemSchema = new Schema({
 const OrderSchema = new Schema(
     {
         table: { type: String, required: true },
+        customerName: { type: String }, // <-- NOVO campo
         items: [OrderItemSchema],
         total: { type: Number, required: true },
         paymentMethod: { type: String, default: 'pendente' },
