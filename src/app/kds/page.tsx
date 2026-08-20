@@ -1,7 +1,19 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
-import { ChefHat, Clock, CheckCircle, ArrowLeft, RefreshCw, AlertCircle, Filter, Plus, AlertTriangle } from 'lucide-react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
+import {
+    ChefHat,
+    Clock,
+    CheckCircle,
+    ArrowLeft,
+    RefreshCw,
+    AlertCircle,
+    Filter,
+    Plus,
+    AlertTriangle,
+    Calendar,
+    X,
+} from 'lucide-react';
 import Tooltip from '@/src/components/Tooltip';
 import ThemeToggle from '@/src/components/ThemeToggle';
 import Link from 'next/link';
@@ -26,10 +38,30 @@ interface Order {
     createdAt: string;
 }
 
+type DateFilterType = 'last18h' | 'today' | 'yesterday' | 'all' | 'specific';
+
 export default function KDSPage() {
     const [orders, setOrders] = useState<Order[]>([]);
     const [loading, setLoading] = useState(true);
     const [filterStatus, setFilterStatus] = useState<'ativos' | 'todos' | 'finalizados'>('ativos');
+    const [dateFilter, setDateFilter] = useState<DateFilterType>('last18h');
+    const [specificDate, setSpecificDate] = useState<string>('');
+
+    // --- Timer para limpeza automática dos filtros ---
+    const timerRef = useRef<NodeJS.Timeout | null>(null);
+
+    const resetAutoClearTimer = () => {
+        // Se já existir um timer rodando, cancela ele
+        if (timerRef.current) {
+            clearTimeout(timerRef.current);
+        }
+
+        // Inicia um novo timer de 1 minuto (60000ms)
+        timerRef.current = setTimeout(() => {
+            console.log('Tempo esgotado, limpando filtros...');
+            handleClearFilters();
+        }, 60000); // 60 segundos
+    };
 
     const fetchOrders = async () => {
         try {
@@ -50,6 +82,18 @@ export default function KDSPage() {
         const interval = setInterval(fetchOrders, 10000);
         return () => clearInterval(interval);
     }, []);
+
+    // Efeito para resetar o timer sempre que os filtros mudarem
+    useEffect(() => {
+        resetAutoClearTimer();
+
+        // Função de limpeza para quando o componente sair da tela
+        return () => {
+            if (timerRef.current) {
+                clearTimeout(timerRef.current);
+            }
+        };
+    }, [filterStatus, dateFilter, specificDate]); // <-- Ele observa essas variáveis
 
     const updateItemStatus = async (orderId: string, itemId: string, itemStatus: string) => {
         try {
@@ -83,18 +127,97 @@ export default function KDSPage() {
         }
     };
 
-    const filteredOrders = orders.filter((order) => {
-        const allItemsConcluded = order.items.length > 0 && order.items.every(i => i.status === 'concluido');
-        const isOrderConcluded = order.status === 'concluido' || allItemsConcluded;
+    // --- Filtro por data (considerando fuso local) ---
+    const filterOrdersByDate = (ordersList: Order[]): Order[] => {
+        const nowLocal = new Date();
 
-        if (filterStatus === 'ativos') {
-            return !isOrderConcluded && order.status !== 'cancelado';
+        return ordersList.filter((order) => {
+            const createdAt = new Date(order.createdAt);
+
+            switch (dateFilter) {
+                case 'last18h': {
+                    const diffMs = nowLocal.getTime() - createdAt.getTime();
+                    const diffHours = diffMs / (1000 * 60 * 60);
+                    return diffHours <= 18;
+                }
+                case 'today': {
+                    return (
+                        createdAt.getDate() === nowLocal.getDate() &&
+                        createdAt.getMonth() === nowLocal.getMonth() &&
+                        createdAt.getFullYear() === nowLocal.getFullYear()
+                    );
+                }
+                case 'yesterday': {
+                    const yesterday = new Date(nowLocal);
+                    yesterday.setDate(yesterday.getDate() - 1);
+                    return (
+                        createdAt.getDate() === yesterday.getDate() &&
+                        createdAt.getMonth() === yesterday.getMonth() &&
+                        createdAt.getFullYear() === yesterday.getFullYear()
+                    );
+                }
+                case 'all': {
+                    return true;
+                }
+                case 'specific': {
+                    if (!specificDate) return true;
+                    const [year, month, day] = specificDate.split('-').map(Number);
+                    return (
+                        createdAt.getDate() === day &&
+                        createdAt.getMonth() === month - 1 &&
+                        createdAt.getFullYear() === year
+                    );
+                }
+                default:
+                    return true;
+            }
+        });
+    };
+
+    // Aplicar filtros combinados (status + data)
+    const filteredOrders = useMemo(() => {
+        const statusFiltered = orders.filter((order) => {
+            const allItemsConcluded = order.items.length > 0 && order.items.every(i => i.status === 'concluido');
+            const isOrderConcluded = order.status === 'concluido' || allItemsConcluded;
+
+            if (filterStatus === 'ativos') {
+                return !isOrderConcluded && order.status !== 'cancelado';
+            }
+            if (filterStatus === 'finalizados') {
+                return isOrderConcluded;
+            }
+            return true; // 'todos'
+        });
+
+        return filterOrdersByDate(statusFiltered);
+    }, [orders, filterStatus, dateFilter, specificDate]);
+
+    // Formatar data/hora para exibição
+    const formatDateTime = (dateStr: string) => {
+        const date = new Date(dateStr);
+        return date.toLocaleString('pt-BR', {
+            day: '2-digit',
+            month: '2-digit',
+            year: 'numeric',
+            hour: '2-digit',
+            minute: '2-digit',
+        });
+    };
+
+    // Handlers para mudança de filtro de data
+    const handleDateFilterChange = (newFilter: DateFilterType) => {
+        setDateFilter(newFilter);
+        if (newFilter !== 'specific') {
+            setSpecificDate(''); // limpa a data específica ao trocar para outro filtro
         }
-        if (filterStatus === 'finalizados') {
-            return isOrderConcluded;
-        }
-        return true;
-    });
+    };
+
+    // Handler para limpar todos os filtros (volta ao padrão)
+    const handleClearFilters = () => {
+        setFilterStatus('ativos');
+        setDateFilter('last18h');
+        setSpecificDate('');
+    };
 
     return (
         <div className="min-h-screen bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100 p-6 transition-colors duration-200">
@@ -107,18 +230,21 @@ export default function KDSPage() {
                         <h1 className="text-2xl font-bold flex items-center gap-2">
                             <ChefHat className="text-amber-500 dark:text-amber-400" /> KDS - Painel da Cozinha
                         </h1>
-                        <p className="text-slate-500 dark:text-slate-400 text-sm">Gerenciamento e status de pedidos e itens em tempo real</p>
+                        <p className="text-slate-500 dark:text-slate-400 text-sm">
+                            Gerenciamento e status de pedidos e itens em tempo real
+                        </p>
                     </div>
                 </div>
 
-                <div className="flex items-center gap-3 flex-wrap">
+                <div className="flex flex-wrap items-center gap-3">
+                    {/* Filtro de Status */}
                     <div className="flex items-center gap-1.5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-1.5 rounded-xl shadow-sm">
-                        <Filter size={14} className="text-slate-400 ml-1" />
+                        <Filter size={14} className="text-indigo-600 dark:text-amber-400 ml-1" />  {/* cor mais forte no dark */}
                         <button
                             onClick={() => setFilterStatus('ativos')}
                             className={`px-3 py-1 rounded-lg text-xs font-semibold transition-colors ${filterStatus === 'ativos'
                                     ? 'bg-amber-500 text-white shadow'
-                                    : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800'
+                                    : 'text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800'
                                 }`}
                         >
                             Pendentes / Ativos
@@ -127,7 +253,7 @@ export default function KDSPage() {
                             onClick={() => setFilterStatus('finalizados')}
                             className={`px-3 py-1 rounded-lg text-xs font-semibold transition-colors ${filterStatus === 'finalizados'
                                     ? 'bg-red-600 text-white shadow'
-                                    : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800'
+                                    : 'text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800'
                                 }`}
                         >
                             Finalizados
@@ -136,18 +262,81 @@ export default function KDSPage() {
                             onClick={() => setFilterStatus('todos')}
                             className={`px-3 py-1 rounded-lg text-xs font-semibold transition-colors ${filterStatus === 'todos'
                                     ? 'bg-slate-800 dark:bg-slate-700 text-white shadow'
-                                    : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800'
+                                    : 'text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800'
                                 }`}
                         >
                             Todos
                         </button>
                     </div>
 
+                    {/* Filtro de Data */}
+                    <div className="flex items-center gap-2 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-1.5 rounded-xl shadow-sm flex-wrap">
+                        <Calendar size={14} className="text-indigo-600 dark:text-amber-400 ml-1" />  {/* cor mais forte no dark */}
+                        <button
+                            onClick={() => handleDateFilterChange('last18h')}
+                            className={`px-3 py-1 rounded-lg text-xs font-semibold transition-colors ${dateFilter === 'last18h'
+                                    ? 'bg-indigo-600 text-white shadow'
+                                    : 'text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800'
+                                }`}
+                        >
+                            18h
+                        </button>
+                        <button
+                            onClick={() => handleDateFilterChange('today')}
+                            className={`px-3 py-1 rounded-lg text-xs font-semibold transition-colors ${dateFilter === 'today'
+                                    ? 'bg-indigo-600 text-white shadow'
+                                    : 'text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800'
+                                }`}
+                        >
+                            Hoje
+                        </button>
+                        <button
+                            onClick={() => handleDateFilterChange('yesterday')}
+                            className={`px-3 py-1 rounded-lg text-xs font-semibold transition-colors ${dateFilter === 'yesterday'
+                                    ? 'bg-indigo-600 text-white shadow'
+                                    : 'text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800'
+                                }`}
+                        >
+                            Ontem
+                        </button>
+                        <button
+                            onClick={() => handleDateFilterChange('all')}
+                            className={`px-3 py-1 rounded-lg text-xs font-semibold transition-colors ${dateFilter === 'all'
+                                    ? 'bg-indigo-600 text-white shadow'
+                                    : 'text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800'
+                                }`}
+                        >
+                            Todos
+                        </button>
+                        <div className="flex items-center gap-1">
+                            <input
+                                type="date"
+                                value={specificDate}
+                                onChange={(e) => {
+                                    setSpecificDate(e.target.value);
+                                    setDateFilter('specific');
+                                }}
+                                className="bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-lg px-2 py-1 text-xs focus:outline-none focus:border-indigo-500 max-w-[140px] text-slate-800 dark:text-slate-200"
+                            />
+                            {dateFilter === 'specific' && specificDate && (
+                                <span className="text-[10px] text-indigo-600 dark:text-amber-400 font-medium">✓</span>
+                            )}
+                        </div>
+                    </div>
+
+                    {/* Botão Limpar */}
+                    <button
+                        onClick={handleClearFilters}
+                        className="flex items-center gap-1.5 bg-slate-200 dark:bg-slate-700 hover:bg-slate-300 dark:hover:bg-slate-600 px-3 py-2 rounded-xl text-xs font-semibold transition-colors border border-slate-300 dark:border-slate-600 shadow-sm text-slate-700 dark:text-slate-200"
+                    >
+                        <X size={14} /> Limpar
+                    </button>
+
                     <ThemeToggle />
                     <Tooltip text="Atualizar lista de pedidos manualmente">
                         <button
                             onClick={fetchOrders}
-                            className="flex items-center gap-2 bg-white dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 px-4 py-2 rounded-xl text-sm font-medium transition-colors border border-slate-200 dark:border-slate-700 shadow-sm"
+                            className="flex items-center gap-2 bg-white dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 px-4 py-2 rounded-xl text-sm font-medium transition-colors border border-slate-200 dark:border-slate-700 shadow-sm text-slate-700 dark:text-slate-300"
                         >
                             <RefreshCw size={16} /> Atualizar
                         </button>
@@ -160,8 +349,8 @@ export default function KDSPage() {
             ) : filteredOrders.length === 0 ? (
                 <div className="text-center py-20 bg-white dark:bg-slate-900/50 rounded-2xl border border-dashed border-slate-300 dark:border-slate-700 p-8 shadow-sm">
                     <ChefHat size={48} className="mx-auto text-slate-400 dark:text-slate-600 mb-4" />
-                    <p className="text-slate-600 dark:text-slate-400 text-lg mb-1">Nenhum pedido encontrado com o filtro selecionado.</p>
-                    <p className="text-xs text-slate-400 dark:text-slate-500">Tente alterar o filtro acima para ver outros pedidos.</p>
+                    <p className="text-slate-600 dark:text-slate-400 text-lg mb-1">Nenhum pedido encontrado com os filtros selecionados.</p>
+                    <p className="text-xs text-slate-400 dark:text-slate-500">Tente ajustar os filtros de data ou status.</p>
                 </div>
             ) : (
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
@@ -182,7 +371,8 @@ export default function KDSPage() {
                                 <div>
                                     <div className="flex justify-between items-center mb-4">
                                         <span className="text-xs font-bold uppercase tracking-wider px-2.5 py-1 rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 flex items-center gap-1.5">
-                                            <Clock size={14} /> {order.table} • {new Date(order.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                                            <Clock size={14} />
+                                            {order.table} • {formatDateTime(order.createdAt)}
                                         </span>
                                         <span
                                             className={`text-xs font-semibold px-2.5 py-1 rounded-full uppercase ${isCardCompleted
@@ -210,7 +400,10 @@ export default function KDSPage() {
                                                     className={`flex flex-col gap-2 text-sm p-3 rounded-xl border transition-all ${isConcluded
                                                             ? 'border-amber-300 dark:border-amber-900/50 bg-amber-50/40 dark:bg-amber-950/20'
                                                             : 'border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950/50'
-                                                        } ${!isConcluded && (hasAddons || hasObservation) ? 'ring-1 ring-amber-400 dark:ring-amber-600' : ''}`}
+                                                        } ${!isConcluded && (hasAddons || hasObservation)
+                                                            ? 'ring-1 ring-amber-400 dark:ring-amber-600'
+                                                            : ''
+                                                        }`}
                                                 >
                                                     <div className="flex justify-between items-center">
                                                         <div className="flex items-center gap-2">
@@ -219,19 +412,25 @@ export default function KDSPage() {
                                                             ) : (
                                                                 <AlertCircle size={16} className="text-amber-500 shrink-0 animate-pulse" />
                                                             )}
-                                                            <span className={`font-medium ${isConcluded ? 'line-through text-slate-500 dark:text-slate-400' : 'text-slate-800 dark:text-slate-200'}`}>
+                                                            <span
+                                                                className={`font-medium ${isConcluded
+                                                                        ? 'line-through text-slate-500 dark:text-slate-400'
+                                                                        : 'text-slate-800 dark:text-slate-200'
+                                                                    }`}
+                                                            >
                                                                 {item.name}
                                                             </span>
                                                         </div>
-                                                        <span className={`font-bold px-2 py-0.5 rounded text-xs ${isConcluded
-                                                                ? 'bg-amber-100 dark:bg-amber-500/20 text-amber-700 dark:text-amber-400'
-                                                                : 'bg-amber-100 dark:bg-amber-400/10 text-amber-600 dark:text-amber-400'
-                                                            }`}>
+                                                        <span
+                                                            className={`font-bold px-2 py-0.5 rounded text-xs ${isConcluded
+                                                                    ? 'bg-amber-100 dark:bg-amber-500/20 text-amber-700 dark:text-amber-400'
+                                                                    : 'bg-amber-100 dark:bg-amber-400/10 text-amber-600 dark:text-amber-400'
+                                                                }`}
+                                                        >
                                                             {item.quantity}x
                                                         </span>
                                                     </div>
 
-                                                    {/* Acréscimos com destaque vibrante */}
                                                     {hasAddons && (
                                                         <div className="flex flex-wrap gap-1.5 mt-1">
                                                             {item.addons!.map((a, i) => (
@@ -247,7 +446,6 @@ export default function KDSPage() {
                                                         </div>
                                                     )}
 
-                                                    {/* Observação com destaque ainda mais forte */}
                                                     {hasObservation && (
                                                         <div className="flex items-start gap-2 mt-1 p-2 bg-red-100 dark:bg-red-900/40 border-l-4 border-red-600 dark:border-red-500 rounded-r-lg shadow-sm">
                                                             <AlertTriangle size={14} className="text-red-600 dark:text-red-400 shrink-0 mt-0.5 animate-pulse" />
@@ -258,20 +456,28 @@ export default function KDSPage() {
                                                     )}
 
                                                     <div className="flex justify-between items-center pt-2 border-t border-slate-100 dark:border-slate-800/60 text-xs">
-                                                        <span className={`font-semibold ${isConcluded ? 'text-amber-600 dark:text-amber-400' : 'text-amber-600 dark:text-amber-400'
-                                                            }`}>
+                                                        <span
+                                                            className={`font-semibold ${isConcluded
+                                                                    ? 'text-amber-600 dark:text-amber-400'
+                                                                    : 'text-amber-600 dark:text-amber-400'
+                                                                }`}
+                                                        >
                                                             {isConcluded ? 'Pronto' : 'Aguardando Preparo'}
                                                         </span>
                                                         {item._id && (
                                                             <button
-                                                                onClick={() => !isConcluded && updateItemStatus(order._id, item._id!, 'concluido')}
+                                                                onClick={() =>
+                                                                    !isConcluded &&
+                                                                    updateItemStatus(order._id, item._id!, 'concluido')
+                                                                }
                                                                 disabled={isConcluded}
                                                                 className={`px-3 py-1 rounded-lg font-bold text-xs transition-colors flex items-center gap-1 shadow-sm ${isConcluded
                                                                         ? 'bg-amber-500 text-white opacity-95 cursor-not-allowed shadow'
                                                                         : 'bg-red-600 hover:bg-red-700 text-white'
                                                                     }`}
                                                             >
-                                                                <CheckCircle size={12} /> {isConcluded ? 'Item Finalizado' : 'Finalizar Item'}
+                                                                <CheckCircle size={12} />{' '}
+                                                                {isConcluded ? 'Item Finalizado' : 'Finalizar Item'}
                                                             </button>
                                                         )}
                                                     </div>
