@@ -13,6 +13,7 @@ interface CartPanelProps {
     onSendToKitchen: () => void;
     onOpenPaymentModal: () => void;
     onEditItem: (item: CartItem) => void;
+    isProcessing: boolean; // <-- Nova prop adicionada
 }
 
 export default function CartPanel({
@@ -26,6 +27,7 @@ export default function CartPanel({
     onSendToKitchen,
     onOpenPaymentModal,
     onEditItem,
+    isProcessing, // <-- Recebendo a prop
 }: CartPanelProps) {
     return (
         <div className="lg:col-span-3 bg-white dark:bg-slate-900 p-4 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm flex flex-col justify-between min-h-0 overflow-hidden">
@@ -96,20 +98,23 @@ export default function CartPanel({
                                                 <>
                                                     <button
                                                         onClick={() => onUpdateQuantity(item._id, -1)}
-                                                        className="p-1 text-slate-500 hover:bg-slate-200 dark:hover:bg-slate-800 rounded"
+                                                        disabled={isProcessing} // Desabilita durante o processamento
+                                                        className="p-1 text-slate-500 hover:bg-slate-200 dark:hover:bg-slate-800 rounded disabled:opacity-50"
                                                     >
                                                         <Minus size={12} />
                                                     </button>
                                                     <span className="text-xs font-bold w-4 text-center">{item.quantity}</span>
                                                     <button
                                                         onClick={() => onUpdateQuantity(item._id, 1)}
-                                                        className="p-1 text-slate-500 hover:bg-slate-200 dark:hover:bg-slate-800 rounded"
+                                                        disabled={isProcessing} // Desabilita durante o processamento
+                                                        className="p-1 text-slate-500 hover:bg-slate-200 dark:hover:bg-slate-800 rounded disabled:opacity-50"
                                                     >
                                                         <Plus size={12} />
                                                     </button>
                                                     <button
                                                         onClick={() => onRemoveFromCart(item._id)}
-                                                        className="p-1 text-red-500 hover:bg-red-50 dark:hover:bg-red-950/50 rounded ml-1"
+                                                        disabled={isProcessing} // Desabilita durante o processamento
+                                                        className="p-1 text-red-500 hover:bg-red-50 dark:hover:bg-red-950/50 rounded ml-1 disabled:opacity-50"
                                                     >
                                                         <Trash2 size={12} />
                                                     </button>
@@ -117,7 +122,8 @@ export default function CartPanel({
                                             )}
                                             <button
                                                 onClick={() => onEditItem(item)}
-                                                className="p-1 text-slate-400 hover:text-indigo-500 hover:bg-indigo-50 dark:hover:bg-indigo-950/50 rounded ml-0.5"
+                                                disabled={isProcessing} // Desabilita durante o processamento
+                                                className="p-1 text-slate-400 hover:text-indigo-500 hover:bg-indigo-50 dark:hover:bg-indigo-950/50 rounded ml-0.5 disabled:opacity-50"
                                                 title="Editar extras/observação"
                                             >
                                                 <Edit3 size={12} />
@@ -142,17 +148,33 @@ export default function CartPanel({
                 <div className="space-y-1.5">
                     <button
                         onClick={onSendToKitchen}
-                        disabled={!canSendToKitchen}
+                        disabled={!canSendToKitchen || isProcessing} // <-- Aplicado o bloqueio
                         className="w-full bg-amber-600 hover:bg-amber-700 disabled:opacity-50 text-white py-2 rounded-xl font-bold text-xs transition-colors flex items-center justify-center gap-1.5 shadow"
                     >
-                        📌 {canSendToKitchen ? 'Enviar para Cozinha' : 'Itens já enviados para a cozinha'}
+                        {/* Spinner de processamento */}
+                        {isProcessing ? (
+                            <svg className="animate-spin h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                            </svg>
+                        ) : (
+                            <span>📌</span>
+                        )}
+                        <span>
+                            {isProcessing
+                                ? 'Processando...'
+                                : (canSendToKitchen ? 'Enviar para Cozinha' : 'Itens já enviados para a cozinha')
+                            }
+                        </span>
                     </button>
+
                     <button
                         onClick={onOpenPaymentModal}
-                        disabled={cart.length === 0}
+                        disabled={cart.length === 0 || isProcessing} // <-- Aplicado o bloqueio
                         className="w-full bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white py-2 rounded-xl font-bold text-xs transition-colors flex items-center justify-center gap-1.5 shadow"
                     >
-                        <CheckCircle2 size={14} /> Fechar Conta & Pagar
+                        <CheckCircle2 size={14} />
+                        {isProcessing ? 'Aguarde...' : 'Fechar Conta & Pagar'}
                     </button>
                 </div>
             </div>

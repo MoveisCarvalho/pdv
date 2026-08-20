@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { ShoppingCart, ArrowLeft } from 'lucide-react';
 import Link from 'next/link';
 import Tooltip from '@/src/components/Tooltip';
@@ -23,6 +23,7 @@ export default function POSPage() {
     const [selectedTable, setSelectedTable] = useState('');
     const [currentOpenOrderId, setCurrentOpenOrderId] = useState<string | null>(null);
     const [loading, setLoading] = useState(true);
+    const [isProcessing, setIsProcessing] = useState(false); // <-- ADICIONE ESTA LINHA
 
     const [isPaymentModalOpen, setIsPaymentModalOpen] = useState(false);
     const [modalPaymentMethod, setModalPaymentMethod] = useState<'dinheiro' | 'pix' | 'credito' | 'debito'>('dinheiro');
@@ -34,6 +35,9 @@ export default function POSPage() {
     // Estados para o modal de edição de item
     const [editingItem, setEditingItem] = useState<CartItem | null>(null);
     const [isEditModalOpen, setIsEditModalOpen] = useState(false);
+
+    // REF para a seção do carrinho (para forçar o foco/scroll no celular)
+    const cartSectionRef = useRef<HTMLDivElement>(null);
 
     useEffect(() => {
         fetchData();
@@ -87,6 +91,28 @@ export default function POSPage() {
         setCart([]);
     };
 
+    // --- FUNÇÃO AUXILIAR DE FOCO NO CARRINHO ---
+    const focusAndHighlightCart = () => {
+        setTimeout(() => {
+            if (cartSectionRef.current) {
+                // 1. Rola a tela centralizando o carrinho no meio da tela do celular
+                cartSectionRef.current.scrollIntoView({ behavior: 'smooth', block: 'center' });
+
+                // 2. Adiciona um brilho temporário no carrinho para o usuário saber onde está
+                cartSectionRef.current.classList.add(
+                    'ring-2', 'ring-indigo-500', 'ring-offset-2',
+                    'ring-offset-slate-100', 'dark:ring-offset-slate-950'
+                );
+                setTimeout(() => {
+                    cartSectionRef.current?.classList.remove(
+                        'ring-2', 'ring-indigo-500', 'ring-offset-2',
+                        'ring-offset-slate-100', 'dark:ring-offset-slate-950'
+                    );
+                }, 2000); // Remove o brilho após 2 segundos
+            }
+        }, 150); // Pequeno delay para garantir que o React renderizou os itens
+    };
+
     const addToCart = (product: Product, selectedAddonIds: string[], observation: string) => {
         if (!selectedTable) {
             alert('Selecione uma mesa ou comanda antes de adicionar produtos.');
@@ -96,8 +122,6 @@ export default function POSPage() {
         const selectedAddons = allAddons.filter(a => selectedAddonIds.includes(a._id));
 
         setCart((prev) => {
-            // Verifica se já existe um item com o mesmo produto e mesmos addons e observação
-            // Para simplificar, criamos um novo item separado (permite variações)
             const newItem: CartItem = {
                 ...product,
                 quantity: 1,
@@ -108,6 +132,9 @@ export default function POSPage() {
             };
             return [...prev, newItem];
         });
+
+        // Aplica o foco e destaque no carrinho
+        focusAndHighlightCart();
     };
 
     const removeFromCart = (productId: string) => {
@@ -149,10 +176,8 @@ export default function POSPage() {
         });
         setCart(mappedCart);
 
-        const cartElement = document.getElementById('cart-section');
-        if (cartElement) {
-            cartElement.scrollIntoView({ behavior: 'smooth' });
-        }
+        // Aplica o foco e destaque no carrinho
+        focusAndHighlightCart();
     };
 
     const totalCart = cart.reduce((acc, item) => {
@@ -196,6 +221,8 @@ export default function POSPage() {
     const handleCheckout = async (keepOpen: boolean = true, chosenPaymentMethod: string = 'pendente') => {
         if (cart.length === 0) return;
         if (keepOpen && currentOpenOrderId && addedItems.length === 0) return;
+
+        setIsProcessing(true); // <-- BLOQUEIA OS BOTÕES NO INÍCIO
 
         try {
             const url = currentOpenOrderId ? `/api/orders/${currentOpenOrderId}` : '/api/orders';
@@ -247,6 +274,8 @@ export default function POSPage() {
             }
         } catch (error) {
             console.error('Erro ao finalizar venda:', error);
+        } finally {
+            setIsProcessing(false); // <-- DESBLOQUEIA OS BOTÕES NO FINAL (mesmo dando erro!)
         }
     };
 
@@ -334,7 +363,12 @@ export default function POSPage() {
                     />
                 </div>
 
-                <div id="cart-section" className="lg:col-span-3 flex flex-col min-h-0">
+                {/* AQUI ADICIONAMOS O REF */}
+                <div
+                    id="cart-section"
+                    ref={cartSectionRef}
+                    className="lg:col-span-3 flex flex-col min-h-0 transition-all duration-300 rounded-xl"
+                >
                     <CartPanel
                         selectedTable={selectedTable}
                         currentOpenOrderId={currentOpenOrderId}
@@ -346,6 +380,7 @@ export default function POSPage() {
                         onSendToKitchen={() => handleCheckout(true)}
                         onOpenPaymentModal={handleOpenPaymentModal}
                         onEditItem={handleEditItem}
+                        isProcessing={isProcessing} // <-- PASSE A PROP AQUI
                     />
                 </div>
 
