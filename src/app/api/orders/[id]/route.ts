@@ -1,20 +1,38 @@
+// src/app/api/orders/[id]/route.ts
 import dbConnect from '@/src/lib/mongodb';
 import Order from '@/src/models/Order';
 import Product from '@/src/models/Product';
-import { NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
+import { getToken } from 'next-auth/jwt';
+import { hasPermission } from '@/src/lib/permissions';
 
 export async function PATCH(
-    request: Request,
+    request: NextRequest,
     { params }: { params: Promise<{ id: string }> | { id: string } }
 ) {
     try {
         await dbConnect();
+        const token = await getToken({ req: request, secret: process.env.NEXTAUTH_SECRET });
+        if (!token) {
+            return NextResponse.json({ success: false, error: 'Não autorizado' }, { status: 401 });
+        }
+        if (!hasPermission(token.role as string, 'update_orders') && token.role !== 'super_admin') {
+            return NextResponse.json({ success: false, error: 'Sem permissão' }, { status: 403 });
+        }
 
         const resolvedParams = await Promise.resolve(params);
         const id = resolvedParams.id;
 
+        // Primeiro, busca o pedido para verificar se pertence ao tenant
+        const filter = token.role === 'super_admin' ? { _id: id } : { _id: id, tenantId: token.tenantId };
+        const existingOrder = await Order.findOne(filter);
+        if (!existingOrder) {
+            return NextResponse.json({ success: false, error: 'Comanda não encontrada ou não pertence ao seu tenant' }, { status: 404 });
+        }
+
+        // A partir daqui, todas as operações usam existingOrder (que já está no tenant correto)
         const body = await request.json();
-        const { status, cancellationReason, cancelledBy, paymentMethod, total, items, newItems, itemId, itemStatus, customerName } = body; // <-- adicionado customerName
+        const { status, cancellationReason, cancelledBy, paymentMethod, total, items, newItems, itemId, itemStatus, customerName } = body;
 
         // Se a requisição for para atualizar o status de um item específico do KDS
         if (itemId && itemStatus) {
@@ -24,15 +42,12 @@ export async function PATCH(
             );
 
             if (updateResult.modifiedCount === 0) {
-                const orderDoc = await Order.findById(id);
-                if (!orderDoc) {
-                    return NextResponse.json({ success: false, error: 'Comanda não encontrada' }, { status: 404 });
-                }
-                const item = orderDoc.items.find((i: any) => i._id?.toString() === itemId);
+                // Fallback: atualiza manualmente
+                const item = existingOrder.items.find((i: any) => i._id?.toString() === itemId);
                 if (item) {
                     item.status = itemStatus;
-                    orderDoc.markModified('items');
-                    await orderDoc.save();
+                    existingOrder.markModified('items');
+                    await existingOrder.save();
                 } else {
                     return NextResponse.json({ success: false, error: 'Item não encontrado na comanda' }, { status: 404 });
                 }
@@ -42,10 +57,8 @@ export async function PATCH(
             return NextResponse.json({ success: true, data: updatedOrder }, { status: 200 });
         }
 
-        const order = await Order.findById(id);
-        if (!order) {
-            return NextResponse.json({ success: false, error: 'Comanda não encontrada' }, { status: 404 });
-        }
+        // Demais atualizações
+        const order = existingOrder; // já é o documento
 
         if (status === 'cancelado' && order.status !== 'cancelado') {
             for (const item of order.items) {
@@ -68,12 +81,11 @@ export async function PATCH(
                 }
             }
             if (paymentMethod) order.paymentMethod = paymentMethod;
-            if (customerName) order.customerName = customerName; // <-- atualiza se enviado
+            if (customerName) order.customerName = customerName;
 
             // 1. Suporte caso o frontend envie a lista completa de itens (reconciliação inteligente)
             if (items && Array.isArray(items)) {
                 const existingItems = order.items || [];
-
                 const activeOrCompletedItems = existingItems.filter(
                     (i: any) => i.status === 'concluido' || i.status === 'preparando'
                 );

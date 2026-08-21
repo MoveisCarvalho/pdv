@@ -1,17 +1,29 @@
-import { NextResponse } from 'next/server';
+// src/app/api/products/[id]/route.ts
+import { NextRequest, NextResponse } from 'next/server';
 import dbConnect from '@/src/lib/mongodb';
 import Product from '@/src/models/Product';
+import { getToken } from 'next-auth/jwt';
+import { hasPermission } from '@/src/lib/permissions';
 
 export async function PUT(
-    request: Request,
+    request: NextRequest,
     context: { params: Promise<{ id: string }> }
 ) {
     try {
         await dbConnect();
+        const token = await getToken({ req: request, secret: process.env.NEXTAUTH_SECRET });
+        if (!token) {
+            return NextResponse.json({ success: false, error: 'Não autorizado' }, { status: 401 });
+        }
+        if (!hasPermission(token.role as string, 'update_products') && token.role !== 'super_admin') {
+            return NextResponse.json({ success: false, error: 'Sem permissão' }, { status: 403 });
+        }
+
         const { id } = await context.params;
         const body = await request.json();
 
-        const updatedProduct = await Product.findByIdAndUpdate(id, body, {
+        const filter = token.role === 'super_admin' ? { _id: id } : { _id: id, tenantId: token.tenantId };
+        const updatedProduct = await Product.findOneAndUpdate(filter, body, {
             new: true,
             runValidators: true,
         });
@@ -19,7 +31,6 @@ export async function PUT(
         if (!updatedProduct) {
             return NextResponse.json({ success: false, error: 'Produto não encontrado' }, { status: 404 });
         }
-
         return NextResponse.json({ success: true, data: updatedProduct }, { status: 200 });
     } catch (error: any) {
         return NextResponse.json({ success: false, error: error.message }, { status: 400 });
@@ -27,19 +38,26 @@ export async function PUT(
 }
 
 export async function DELETE(
-    request: Request,
+    request: NextRequest,
     context: { params: Promise<{ id: string }> }
 ) {
     try {
         await dbConnect();
-        const { id } = await context.params;
+        const token = await getToken({ req: request, secret: process.env.NEXTAUTH_SECRET });
+        if (!token) {
+            return NextResponse.json({ success: false, error: 'Não autorizado' }, { status: 401 });
+        }
+        if (!hasPermission(token.role as string, 'delete_products') && token.role !== 'super_admin') {
+            return NextResponse.json({ success: false, error: 'Sem permissão' }, { status: 403 });
+        }
 
-        const deletedProduct = await Product.findByIdAndDelete(id);
+        const { id } = await context.params;
+        const filter = token.role === 'super_admin' ? { _id: id } : { _id: id, tenantId: token.tenantId };
+        const deletedProduct = await Product.findOneAndDelete(filter);
 
         if (!deletedProduct) {
             return NextResponse.json({ success: false, error: 'Produto não encontrado' }, { status: 404 });
         }
-
         return NextResponse.json({ success: true, data: {} }, { status: 200 });
     } catch (error: any) {
         return NextResponse.json({ success: false, error: error.message }, { status: 400 });

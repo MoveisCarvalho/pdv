@@ -2,50 +2,126 @@
 
 import Tooltip from "@/src/components/Tooltip";
 import ThemeToggle from "@/src/components/ThemeToggle";
-import { ShieldCheck, Smartphone, ShoppingCart, Users, Database, ChefHat, Package } from "lucide-react";
+import {
+  ShieldCheck,
+  Smartphone,
+  ShoppingCart,
+  Users,
+  Database,
+  ChefHat,
+  Package,
+  LogOut,
+  Lock
+} from "lucide-react";
 import Link from "next/link";
+import { signOut, useSession } from 'next-auth/react';
+import { hasPermission, type Role } from '@/src/lib/permissions';
+
+// Lista de módulos com permissões necessárias
+const modules = [
+  {
+    href: '/pos',
+    icon: ShoppingCart,
+    label: 'Frente de Caixa',
+    permission: 'view_orders' // vendedor/atendente podem ver pedidos
+  },
+  {
+    href: '/kds',
+    icon: ChefHat,
+    label: 'Painel Cozinha',
+    permission: 'view_orders' // cozinha precisa ver pedidos
+  },
+  {
+    href: '/mobile',
+    icon: Smartphone,
+    label: 'Pedido Mobile',
+    permission: 'create_orders' // atendentes podem criar pedidos
+  },
+  {
+    href: '/employees',
+    icon: Users,
+    label: 'Funcionários',
+    permission: 'view_employees' // apenas quem pode ver funcionários
+  },
+  {
+    href: '/admin',
+    icon: Package,
+    label: 'Painel Admin',
+    permission: 'view_products' // admin/gerente podem ver produtos
+  },
+];
 
 export default function Home() {
+  const { data: session } = useSession();
+  const userRole = (session?.user?.role as Role) || 'employee';
+  const userName = session?.user?.name || 'Usuário';
+
+  // Mapeamento de roles para exibição amigável
+  const roleLabels: Record<string, string> = {
+    super_admin: 'Super Admin',
+    admin: 'Administrador',
+    manager: 'Gerente',
+    seller: 'Vendedor',
+    attendant: 'Atendente',
+    employee: 'Funcionário',
+  };
+
+  const userRoleLabel = roleLabels[userRole] || userRole;
+
+  // Filtra os módulos que o usuário tem permissão para ver
+  const accessibleModules = modules.filter(mod =>
+    hasPermission(userRole, mod.permission) || userRole === 'super_admin'
+  );
+
   return (
     <main className="max-w-6xl mx-auto p-6">
       <header className="flex flex-col md:flex-row justify-between items-center py-6 border-b border-slate-200 dark:border-slate-800 mb-8 gap-4">
         <div>
           <h1 className="text-3xl font-bold text-slate-800 dark:text-slate-100">PDV Master 4.0</h1>
-          <p className="text-slate-500 dark:text-slate-400">Ambiente Comercial Inteligente, Responsivo e Gratuito</p>
+          <p className="text-slate-600 dark:text-slate-300 text-sm font-medium">
+            {userName} • <span className="text-indigo-600 dark:text-indigo-400">{userRoleLabel}</span>
+          </p>
         </div>
         <div className="flex items-center gap-3">
           <ThemeToggle />
+          <Link
+            href="/profile"
+            className="flex items-center gap-1.5 px-3 py-1.5 bg-blue-100 dark:bg-blue-900/30 text-blue-800 dark:text-blue-400 text-xs font-semibold rounded-full border border-blue-200 dark:border-blue-800/50 hover:bg-blue-200 dark:hover:bg-blue-900/50 transition-colors"
+          >
+            <Lock size={16} /> Perfil
+          </Link>
           <Tooltip text="Sistema conectado e pronto para operação!">
             <span className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-100 dark:bg-emerald-900/30 text-emerald-800 dark:text-emerald-400 text-xs font-semibold rounded-full border border-emerald-200 dark:border-emerald-800/50">
               <ShieldCheck size={16} /> Status: Online
             </span>
           </Tooltip>
+          <button
+            onClick={() => signOut({ callbackUrl: '/login' })}
+            className="flex items-center gap-1.5 px-3 py-1.5 bg-red-100 dark:bg-red-900/30 text-red-800 dark:text-red-400 text-xs font-semibold rounded-full border border-red-200 dark:border-red-800/50 hover:bg-red-200 dark:hover:bg-red-900/50 transition-colors cursor-pointer"
+          >
+            <LogOut size={16} /> Sair
+          </button>
         </div>
       </header>
 
-      {/* Atalhos Rápidos para todos os módulos do sistema */}
-      <div className="grid grid-cols-2 md:grid-cols-5 gap-4 mb-8">
-        <Link href="/pos" className="bg-white dark:bg-slate-900 p-4 rounded-xl border border-slate-200 dark:border-slate-800 hover:border-indigo-500 transition-all text-center shadow-sm">
-          <ShoppingCart size={24} className="mx-auto text-indigo-600 dark:text-indigo-400 mb-2" />
-          <span className="font-semibold text-sm text-slate-800 dark:text-slate-200">Frente de Caixa</span>
-        </Link>
-        <Link href="/kds" className="bg-white dark:bg-slate-900 p-4 rounded-xl border border-slate-200 dark:border-slate-800 hover:border-indigo-500 transition-all text-center shadow-sm">
-          <ChefHat size={24} className="mx-auto text-amber-500 mb-2" />
-          <span className="font-semibold text-sm text-slate-800 dark:text-slate-200">Painel Cozinha</span>
-        </Link>
-        <Link href="/mobile" className="bg-white dark:bg-slate-900 p-4 rounded-xl border border-slate-200 dark:border-slate-800 hover:border-indigo-500 transition-all text-center shadow-sm">
-          <Smartphone size={24} className="mx-auto text-purple-600 dark:text-purple-400 mb-2" />
-          <span className="font-semibold text-sm text-slate-800 dark:text-slate-200">Pedido Mobile</span>
-        </Link>
-        <Link href="/employees" className="bg-white dark:bg-slate-900 p-4 rounded-xl border border-slate-200 dark:border-slate-800 hover:border-indigo-500 transition-all text-center shadow-sm">
-          <Users size={24} className="mx-auto text-amber-600 dark:text-amber-400 mb-2" />
-          <span className="font-semibold text-sm text-slate-800 dark:text-slate-200">Funcionários</span>
-        </Link>
-        <Link href="/admin" className="bg-white dark:bg-slate-900 p-4 rounded-xl border border-slate-200 dark:border-slate-800 hover:border-indigo-500 transition-all text-center shadow-sm">
-          <Package size={24} className="mx-auto text-blue-600 dark:text-blue-400 mb-2" />
-          <span className="font-semibold text-sm text-slate-800 dark:text-slate-200">Painel Admin</span>
-        </Link>
-      </div>
+      {/* Atalhos Rápidos - apenas módulos acessíveis */}
+      {accessibleModules.length > 0 && (
+        <div className="grid grid-cols-2 md:grid-cols-5 gap-4 mb-8">
+          {accessibleModules.map((mod) => {
+            const Icon = mod.icon;
+            return (
+              <Link
+                key={mod.href}
+                href={mod.href}
+                className="bg-white dark:bg-slate-900 p-4 rounded-xl border border-slate-200 dark:border-slate-800 hover:border-indigo-500 transition-all text-center shadow-sm"
+              >
+                <Icon size={24} className="mx-auto text-indigo-600 dark:text-indigo-400 mb-2" />
+                <span className="font-semibold text-sm text-slate-800 dark:text-slate-200">{mod.label}</span>
+              </Link>
+            );
+          })}
+        </div>
+      )}
 
       <section className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-12">
         <div className="bg-white dark:bg-slate-900 p-6 rounded-xl shadow-sm border border-slate-200 dark:border-slate-800 flex flex-col justify-between">
