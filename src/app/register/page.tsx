@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { useState } from 'react';
 import Link from 'next/link';
 import { Store, Building2, Phone, Mail, MapPin, Lock, Loader2 } from 'lucide-react';
+import ThemeToggle from '@/src/components/ThemeToggle';
 
 export default function Register() {
     const { control, handleSubmit, formState: { errors } } = useForm();
@@ -20,7 +21,6 @@ export default function Register() {
                 headers: { 'Content-Type': 'application/json' }
             });
 
-            // Lê como texto primeiro para evitar o erro "Unexpected end of JSON input" se o servidor falhar
             const textResponse = await res.text();
             let result;
             try {
@@ -43,29 +43,34 @@ export default function Register() {
     };
 
     return (
-        <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-purple-100 via-white to-blue-100 p-4 py-10">
-            <div className="w-full max-w-lg bg-white rounded-2xl shadow-2xl p-8 border border-gray-100">
+        <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-purple-100 via-white to-blue-100 dark:from-slate-950 dark:via-slate-900 dark:to-indigo-950 p-4 py-10 relative transition-colors">
+            {/* Botão de alternância de tema no canto superior direito */}
+            <div className="absolute top-4 right-4">
+                <ThemeToggle />
+            </div>
+
+            <div className="w-full max-w-lg bg-white dark:bg-slate-900 rounded-2xl shadow-2xl p-8 border border-gray-100 dark:border-slate-800 transition-colors">
                 <div className="text-center mb-6">
-                    <h1 className="text-3xl font-bold text-gray-800">Criar Conta</h1>
-                    <p className="text-gray-500 mt-2">Cadastre sua empresa</p>
+                    <h1 className="text-3xl font-bold text-gray-800 dark:text-slate-100">Criar Conta</h1>
+                    <p className="text-gray-500 dark:text-slate-400 mt-2">Cadastre sua empresa</p>
                 </div>
 
                 <form onSubmit={handleSubmit(onSubmit)} className="space-y-5">
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
                         {/* Nome da empresa */}
                         <div className="relative md:col-span-2">
-                            <Store className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 w-5 h-5" />
+                            <Store className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 dark:text-slate-500 w-5 h-5" />
                             <input
                                 {...control.register('name', { required: 'Nome é obrigatório' })}
                                 placeholder="Nome da empresa"
-                                className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-all"
+                                className="w-full pl-10 pr-4 py-3 bg-white dark:bg-slate-950 text-slate-800 dark:text-slate-100 border border-gray-300 dark:border-slate-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-all"
                             />
                             {errors.name && <span className="text-red-500 text-xs mt-1 block">{errors.name.message as string}</span>}
                         </div>
 
                         {/* CNPJ ou CPF dinâmico com PatternFormat */}
                         <div className="relative md:col-span-2">
-                            <Building2 className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 w-5 h-5" />
+                            <Building2 className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 dark:text-slate-500 w-5 h-5" />
                             <Controller
                                 name="cnpjCpf"
                                 control={control}
@@ -74,7 +79,7 @@ export default function Register() {
                                     const digits = (value || '').replace(/\D/g, '');
                                     const dynamicFormat = digits.length > 11
                                         ? '##.###.###/####-##' // CNPJ
-                                        : '###.###.###-##';     // CPF
+                                        : '###.###.###-##';    // CPF
 
                                     return (
                                         <PatternFormat
@@ -84,7 +89,7 @@ export default function Register() {
                                             format={dynamicFormat}
                                             mask="_"
                                             placeholder="CPF ou CNPJ"
-                                            className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-all"
+                                            className="w-full pl-10 pr-4 py-3 bg-white dark:bg-slate-950 text-slate-800 dark:text-slate-100 border border-gray-300 dark:border-slate-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-all"
                                         />
                                     );
                                 }}
@@ -94,7 +99,7 @@ export default function Register() {
 
                         {/* Telefone com máscara */}
                         <div className="relative">
-                            <Phone className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 w-5 h-5" />
+                            <Phone className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 dark:text-slate-500 w-5 h-5" />
                             <Controller
                                 name="phone"
                                 control={control}
@@ -107,7 +112,7 @@ export default function Register() {
                                         format="(##) #####-####"
                                         mask="_"
                                         placeholder="Telefone"
-                                        className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-all"
+                                        className="w-full pl-10 pr-4 py-3 bg-white dark:bg-slate-950 text-slate-800 dark:text-slate-100 border border-gray-300 dark:border-slate-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-all"
                                     />
                                 )}
                             />
@@ -116,7 +121,7 @@ export default function Register() {
 
                         {/* Email */}
                         <div className="relative">
-                            <Mail className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 w-5 h-5" />
+                            <Mail className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 dark:text-slate-500 w-5 h-5" />
                             <input
                                 {...control.register('email', {
                                     required: 'Email é obrigatório',
@@ -124,30 +129,30 @@ export default function Register() {
                                 })}
                                 type="email"
                                 placeholder="Email"
-                                className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-all"
+                                className="w-full pl-10 pr-4 py-3 bg-white dark:bg-slate-950 text-slate-800 dark:text-slate-100 border border-gray-300 dark:border-slate-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-all"
                             />
                             {errors.email && <span className="text-red-500 text-xs mt-1 block">{errors.email.message as string}</span>}
                         </div>
 
                         {/* Cidade */}
                         <div className="relative">
-                            <MapPin className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 w-5 h-5" />
+                            <MapPin className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 dark:text-slate-500 w-5 h-5" />
                             <input
                                 {...control.register('city', { required: 'Cidade é obrigatória' })}
                                 placeholder="Cidade"
-                                className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-all"
+                                className="w-full pl-10 pr-4 py-3 bg-white dark:bg-slate-950 text-slate-800 dark:text-slate-100 border border-gray-300 dark:border-slate-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-all"
                             />
                             {errors.city && <span className="text-red-500 text-xs mt-1 block">{errors.city.message as string}</span>}
                         </div>
 
                         {/* Senha */}
                         <div className="relative md:col-span-2">
-                            <Lock className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 w-5 h-5" />
+                            <Lock className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 dark:text-slate-500 w-5 h-5" />
                             <input
                                 {...control.register('password', { required: 'Senha é obrigatória', minLength: { value: 6, message: 'Mínimo 6 caracteres' } })}
                                 type="password"
                                 placeholder="Senha do administrador"
-                                className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-all"
+                                className="w-full pl-10 pr-4 py-3 bg-white dark:bg-slate-950 text-slate-800 dark:text-slate-100 border border-gray-300 dark:border-slate-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-all"
                             />
                             {errors.password && <span className="text-red-500 text-xs mt-1 block">{errors.password.message as string}</span>}
                         </div>
@@ -156,16 +161,16 @@ export default function Register() {
                     <button
                         type="submit"
                         disabled={loading}
-                        className="w-full bg-purple-600 hover:bg-purple-700 text-white font-bold py-3 px-4 rounded-lg transition-all shadow-md hover:shadow-lg disabled:opacity-70 disabled:cursor-not-allowed flex items-center justify-center mt-4"
+                        className="w-full bg-purple-600 hover:bg-purple-700 dark:bg-purple-600 dark:hover:bg-purple-500 text-white font-bold py-3 px-4 rounded-lg transition-all shadow-md hover:shadow-lg disabled:opacity-70 disabled:cursor-not-allowed flex items-center justify-center mt-4 cursor-pointer"
                     >
                         {loading ? <Loader2 className="animate-spin w-5 h-5" /> : 'Cadastrar'}
                     </button>
                 </form>
 
                 <div className="text-center mt-6">
-                    <p className="text-gray-500 text-sm">
+                    <p className="text-gray-500 dark:text-slate-400 text-sm">
                         Já possui uma conta?{' '}
-                        <Link href="/login" className="text-purple-600 hover:underline font-semibold">
+                        <Link href="/login" className="text-purple-600 dark:text-purple-400 hover:underline font-semibold">
                             Faça o Login
                         </Link>
                     </p>
