@@ -7,11 +7,11 @@ import {
   Smartphone,
   ShoppingCart,
   Users,
-  Database,
   ChefHat,
   Package,
   LogOut,
-  Lock
+  Lock,
+  Store
 } from "lucide-react";
 import Link from "next/link";
 import { signOut, useSession } from 'next-auth/react';
@@ -23,31 +23,31 @@ const modules = [
     href: '/pos',
     icon: ShoppingCart,
     label: 'Frente de Caixa',
-    permission: 'view_orders' // vendedor/atendente podem ver pedidos
+    permission: 'view_orders'
   },
   {
     href: '/kds',
     icon: ChefHat,
     label: 'Painel Cozinha',
-    permission: 'view_orders' // cozinha precisa ver pedidos
+    permission: 'view_orders'
   },
   {
     href: '/mobile',
     icon: Smartphone,
     label: 'Pedido Mobile',
-    permission: 'create_orders' // atendentes podem criar pedidos
+    permission: 'create_orders'
   },
   {
     href: '/employees',
     icon: Users,
     label: 'Funcionários',
-    permission: 'view_employees' // apenas quem pode ver funcionários
+    permission: 'view_employees'
   },
   {
     href: '/admin',
     icon: Package,
     label: 'Painel Admin',
-    permission: 'view_products' // admin/gerente podem ver produtos
+    permission: 'view_products'
   },
 ];
 
@@ -55,8 +55,8 @@ export default function Home() {
   const { data: session } = useSession();
   const userRole = (session?.user?.role as Role) || 'employee';
   const userName = session?.user?.name || 'Usuário';
+  const tenantName = session?.user?.tenantName || '';
 
-  // Mapeamento de roles para exibição amigável
   const roleLabels: Record<string, string> = {
     super_admin: 'Super Admin',
     admin: 'Administrador',
@@ -68,106 +68,114 @@ export default function Home() {
 
   const userRoleLabel = roleLabels[userRole] || userRole;
 
-  // Filtra os módulos que o usuário tem permissão para ver
   const accessibleModules = modules.filter(mod =>
     hasPermission(userRole, mod.permission) || userRole === 'super_admin'
   );
 
   return (
-    <main className="max-w-6xl mx-auto p-6">
-      <header className="flex flex-col md:flex-row justify-between items-center py-6 border-b border-slate-200 dark:border-slate-800 mb-8 gap-4">
-        <div>
-          <h1 className="text-3xl font-bold text-slate-800 dark:text-slate-100">PDV Master 4.0</h1>
-          <p className="text-slate-600 dark:text-slate-300 text-sm font-medium">
-            {userName} • <span className="text-indigo-600 dark:text-indigo-400">{userRoleLabel}</span>
-          </p>
-        </div>
-        <div className="flex items-center gap-3">
-          <ThemeToggle />
-          <Link
-            href="/profile"
-            className="flex items-center gap-1.5 px-3 py-1.5 bg-blue-100 dark:bg-blue-900/30 text-blue-800 dark:text-blue-400 text-xs font-semibold rounded-full border border-blue-200 dark:border-blue-800/50 hover:bg-blue-200 dark:hover:bg-blue-900/50 transition-colors"
-          >
-            <Lock size={16} /> Perfil
-          </Link>
-          <Tooltip text="Sistema conectado e pronto para operação!">
-            <span className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-100 dark:bg-emerald-900/30 text-emerald-800 dark:text-emerald-400 text-xs font-semibold rounded-full border border-emerald-200 dark:border-emerald-800/50">
-              <ShieldCheck size={16} /> Status: Online
-            </span>
-          </Tooltip>
-          <button
-            onClick={() => signOut({ callbackUrl: '/login' })}
-            className="flex items-center gap-1.5 px-3 py-1.5 bg-red-100 dark:bg-red-900/30 text-red-800 dark:text-red-400 text-xs font-semibold rounded-full border border-red-200 dark:border-red-800/50 hover:bg-red-200 dark:hover:bg-red-900/50 transition-colors cursor-pointer"
-          >
-            <LogOut size={16} /> Sair
-          </button>
-        </div>
-      </header>
-
-      {/* Atalhos Rápidos - apenas módulos acessíveis */}
-      {accessibleModules.length > 0 && (
-        <div className="grid grid-cols-2 md:grid-cols-5 gap-4 mb-8">
-          {accessibleModules.map((mod) => {
-            const Icon = mod.icon;
-            return (
-              <Link
-                key={mod.href}
-                href={mod.href}
-                className="bg-white dark:bg-slate-900 p-4 rounded-xl border border-slate-200 dark:border-slate-800 hover:border-indigo-500 transition-all text-center shadow-sm"
-              >
-                <Icon size={24} className="mx-auto text-indigo-600 dark:text-indigo-400 mb-2" />
-                <span className="font-semibold text-sm text-slate-800 dark:text-slate-200">{mod.label}</span>
-              </Link>
-            );
-          })}
-        </div>
-      )}
-
-      <section className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-12">
-        <div className="bg-white dark:bg-slate-900 p-6 rounded-xl shadow-sm border border-slate-200 dark:border-slate-800 flex flex-col justify-between">
+    <main className="h-screen flex flex-col bg-slate-50 dark:bg-slate-950 overflow-hidden">
+      <div className="max-w-6xl mx-auto w-full px-6 flex flex-col h-full">
+        {/* ===== CABEÇALHO ===== */}
+        <header className="flex flex-col md:flex-row justify-between items-center py-4 border-b border-slate-200 dark:border-slate-800 flex-shrink-0">
           <div>
-            <div className="p-3 bg-blue-50 dark:bg-blue-950/50 text-blue-600 dark:text-blue-400 rounded-lg w-fit mb-4">
-              <ShoppingCart size={24} />
-            </div>
-            <h3 className="text-lg font-semibold text-slate-800 dark:text-slate-100 mb-2">PDV & Caixa</h3>
-            <p className="text-slate-600 dark:text-slate-400 text-sm">Frente de caixa rápida com suporte a leitor de código de barras e atalhos.</p>
+            {tenantName ? (
+              <>
+                <h1 className="text-3xl md:text-4xl font-bold text-slate-800 dark:text-slate-100">
+                  {tenantName}
+                </h1>
+                <p className="text-md md:text-lg font-medium text-slate-600 dark:text-slate-300">
+                  {userName} • <span className="text-indigo-600 dark:text-indigo-400">{userRoleLabel}</span>
+                </p>
+              </>
+            ) : (
+              <>
+                <h1 className="text-2xl md:text-3xl font-bold text-slate-800 dark:text-slate-100">PDV Master 4.0</h1>
+                <p className="text-sm font-medium text-slate-600 dark:text-slate-300">
+                  {userName} • <span className="text-indigo-600 dark:text-indigo-400">{userRoleLabel}</span>
+                </p>
+              </>
+            )}
           </div>
-          <span className="mt-6 text-xs font-medium text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-950/50 px-2.5 py-1 rounded w-fit">Etapa 4</span>
-        </div>
-
-        <div className="bg-white dark:bg-slate-900 p-6 rounded-xl shadow-sm border border-slate-200 dark:border-slate-800 flex flex-col justify-between">
-          <div>
-            <div className="p-3 bg-purple-50 dark:bg-purple-950/50 text-purple-600 dark:text-purple-400 rounded-lg w-fit mb-4">
-              <Smartphone size={24} />
-            </div>
-            <h3 className="text-lg font-semibold text-slate-800 dark:text-slate-100 mb-2">Pedido Mobile & Pix</h3>
-            <p className="text-slate-600 dark:text-slate-400 text-sm">Lançamento direto pelo celular do atendente com QR Code Pix instantâneo.</p>
+          <div className="flex items-center gap-3 flex-shrink-0">
+            <ThemeToggle />
+            <Link
+              href="/profile"
+              className="flex items-center gap-1.5 px-3 py-1.5 bg-blue-100 dark:bg-blue-900/30 text-blue-800 dark:text-blue-400 text-xs font-semibold rounded-full border border-blue-200 dark:border-blue-800/50 hover:bg-blue-200 dark:hover:bg-blue-900/50 transition-colors"
+            >
+              <Lock size={16} /> Perfil
+            </Link>
+            <Tooltip text="Sistema conectado e pronto para operação!">
+              <span className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-100 dark:bg-emerald-900/30 text-emerald-800 dark:text-emerald-400 text-xs font-semibold rounded-full border border-emerald-200 dark:border-emerald-800/50">
+                <ShieldCheck size={16} /> Status: Online
+              </span>
+            </Tooltip>
+            <button
+              onClick={() => signOut({ callbackUrl: '/login' })}
+              className="flex items-center gap-1.5 px-3 py-1.5 bg-red-100 dark:bg-red-900/30 text-red-800 dark:text-red-400 text-xs font-semibold rounded-full border border-red-200 dark:border-red-800/50 hover:bg-red-200 dark:hover:bg-red-900/50 transition-colors cursor-pointer"
+            >
+              <LogOut size={16} /> Sair
+            </button>
           </div>
-          <span className="mt-6 text-xs font-medium text-purple-600 dark:text-purple-400 bg-purple-50 dark:bg-purple-950/50 px-2.5 py-1 rounded w-fit">Etapa 3</span>
-        </div>
+        </header>
 
-        <div className="bg-white dark:bg-slate-900 p-6 rounded-xl shadow-sm border border-slate-200 dark:border-slate-800 flex flex-col justify-between">
-          <div>
-            <div className="p-3 bg-amber-50 dark:bg-amber-950/50 text-amber-600 dark:text-amber-400 rounded-lg w-fit mb-4">
-              <Users size={24} />
-            </div>
-            <h3 className="text-lg font-semibold text-slate-800 dark:text-slate-100 mb-2">Comissões & Funcionários</h3>
-            <p className="text-slate-600 dark:text-slate-400 text-sm">Controle de repasses, pagamentos e recebimentos por atendente.</p>
+        {/* ===== ATALHOS RÁPIDOS ===== */}
+        {accessibleModules.length > 0 && (
+          <div className="grid grid-cols-2 md:grid-cols-5 gap-3 py-4 flex-shrink-0">
+            {accessibleModules.map((mod) => {
+              const Icon = mod.icon;
+              return (
+                <Link
+                  key={mod.href}
+                  href={mod.href}
+                  className="bg-white dark:bg-slate-900 p-3 rounded-xl border border-slate-200 dark:border-slate-800 hover:border-indigo-500 transition-all text-center shadow-sm hover:shadow-md"
+                >
+                  <Icon size={22} className="mx-auto text-indigo-600 dark:text-indigo-400 mb-1" />
+                  <span className="font-semibold text-xs text-slate-800 dark:text-slate-200">{mod.label}</span>
+                </Link>
+              );
+            })}
           </div>
-          <span className="mt-6 text-xs font-medium text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/50 px-2.5 py-1 rounded w-fit">Etapa 5</span>
-        </div>
-      </section>
+        )}
 
-      <div className="bg-indigo-900 dark:bg-indigo-950 text-white p-8 rounded-2xl shadow-lg flex flex-col md:flex-row items-center justify-between gap-6 border border-indigo-800">
-        <div>
-          <h2 className="text-2xl font-bold mb-2">Sistema PDV Full-Stack Concluído!</h2>
-          <p className="text-indigo-200 max-w-xl text-sm">
-            Todos os módulos integrados com MongoDB, Mongoose, Next.js App Router, Painel Administrativo, Cozinha e Caixa.
-          </p>
-        </div>
-        <div className="flex items-center gap-2 bg-indigo-800 dark:bg-indigo-900 px-4 py-2 rounded-xl border border-indigo-700 text-sm">
-          <Database size={18} className="text-indigo-300" />
-          <span>Pronto para operação</span>
+        {/* ===== BLOCO PRINCIPAL COM IMAGEM DE FUNDO ===== */}
+        <div
+          className="relative flex-1 rounded-2xl overflow-hidden mb-4"
+          style={{
+            backgroundImage: `url('/pdvFundo.jfif')`,
+            backgroundSize: 'cover',
+            backgroundPosition: 'center',
+          }}
+        >
+          {/* Overlay escuro para legibilidade */}
+          <div className="absolute inset-0 bg-black/40"></div>
+
+          {/* Conteúdo central */}
+          <div className="relative z-10 h-full flex flex-col items-center justify-center text-center text-white px-4">
+            <div className="flex justify-center mb-4">
+              <div className="p-4 bg-white/20 backdrop-blur-sm rounded-full border border-white/30 shadow-xl">
+                <Store size={56} className="text-white drop-shadow-lg" />
+              </div>
+            </div>
+            <h1 className="text-4xl md:text-6xl font-extrabold tracking-tight drop-shadow-lg">
+              PDV
+            </h1>
+            <p className="mt-2 text-base md:text-lg font-light text-white/90 max-w-xl leading-relaxed">
+              Sistema completo de gestão para vendas, pedidos, estoque e equipe.
+              <br />
+              <span className="text-xs opacity-80">Rápido, integrado e pronto para qualquer negócio.</span>
+            </p>
+            <div className="mt-4 flex flex-wrap justify-center gap-2">
+              <span className="px-3 py-1.5 bg-white/20 backdrop-blur-sm rounded-full text-xs font-medium border border-white/30">
+                🚀 Frente de Caixa
+              </span>
+              <span className="px-3 py-1.5 bg-white/20 backdrop-blur-sm rounded-full text-xs font-medium border border-white/30">
+                📱 Mobile
+              </span>
+              <span className="px-3 py-1.5 bg-white/20 backdrop-blur-sm rounded-full text-xs font-medium border border-white/30">
+                📊 Gestão
+              </span>
+            </div>
+          </div>
         </div>
       </div>
     </main>
