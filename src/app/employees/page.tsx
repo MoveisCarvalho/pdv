@@ -8,6 +8,7 @@ import {
     Edit,
     Trash2,
     X,
+    Building2,
 } from 'lucide-react';
 import Link from 'next/link';
 import Tooltip from '@/src/components/Tooltip';
@@ -23,7 +24,7 @@ interface Employee {
     cpf?: string;
     role: string;
     commissionRate: number;
-    tenantId?: string;
+    tenantId?: string | { _id: string; name: string };
     password?: string;
 }
 
@@ -78,9 +79,7 @@ export default function EmployeesPage() {
 
     useEffect(() => {
         fetchData();
-        if (userRole === 'super_admin') {
-            fetchTenants();
-        }
+        fetchTenants();
     }, []);
 
     const fetchData = async () => {
@@ -159,7 +158,10 @@ export default function EmployeesPage() {
 
     const openEditModal = (emp: Employee) => {
         setEditingEmployee(emp);
-        setEditForm({ ...emp });
+        setEditForm({
+            ...emp,
+            tenantId: typeof emp.tenantId === 'object' && emp.tenantId !== null ? emp.tenantId._id : emp.tenantId,
+        });
         setIsEditModalOpen(true);
     };
 
@@ -167,10 +169,15 @@ export default function EmployeesPage() {
         e.preventDefault();
         if (!editingEmployee) return;
         try {
+            const payload = { ...editForm };
+            if (userRole !== 'super_admin') {
+                delete payload.tenantId;
+            }
+
             const res = await fetch(`/api/employees/${editingEmployee._id}`, {
                 method: 'PUT',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(editForm),
+                body: JSON.stringify(payload),
             });
             const json = await res.json();
             if (json.success) {
@@ -401,6 +408,11 @@ export default function EmployeesPage() {
                         <div className="grid grid-cols-1 gap-4">
                             {employees.map((emp) => {
                                 const stats = getEmployeeStats(emp._id, emp.commissionRate);
+                                const tenantName =
+                                    typeof emp.tenantId === 'object' && emp.tenantId !== null
+                                        ? emp.tenantId.name
+                                        : tenants.find((t) => t._id === emp.tenantId)?.name || 'Empresa não informada';
+
                                 return (
                                     <div
                                         key={emp._id}
@@ -413,6 +425,9 @@ export default function EmployeesPage() {
                                                 </h3>
                                                 <span className="text-xs uppercase px-2 py-0.5 rounded bg-indigo-50 dark:bg-indigo-950 text-indigo-600 dark:text-indigo-400 font-semibold border border-indigo-100 dark:border-indigo-900">
                                                     {roleLabels[emp.role] || emp.role}
+                                                </span>
+                                                <span className="text-xs px-2 py-0.5 rounded bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 font-medium flex items-center gap-1">
+                                                    <Building2 size={12} /> {tenantName}
                                                 </span>
                                             </div>
                                             <p className="text-xs text-slate-400">
@@ -469,10 +484,10 @@ export default function EmployeesPage() {
                 </div>
             </main>
 
-            {/* Modal de edição (com campos phone, cpf e senha) */}
+            {/* Modal de edição com rolagem interna ajustada */}
             {isEditModalOpen && editingEmployee && (
                 <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-                    <div className="bg-white dark:bg-slate-900 rounded-2xl p-6 max-w-md w-full shadow-xl border border-slate-200 dark:border-slate-800">
+                    <div className="bg-white dark:bg-slate-900 rounded-2xl p-6 max-w-md w-full shadow-xl border border-slate-200 dark:border-slate-800 max-h-[90vh] overflow-y-auto">
                         <div className="flex justify-between items-center mb-4">
                             <h2 className="text-xl font-bold text-slate-800 dark:text-slate-100">
                                 Editar Funcionário
@@ -562,6 +577,28 @@ export default function EmployeesPage() {
                                     className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:border-indigo-500"
                                 />
                             </div>
+
+                            {userRole === 'super_admin' && (
+                                <div>
+                                    <label className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider block mb-1">
+                                        Tenant / Empresa *
+                                    </label>
+                                    <select
+                                        required
+                                        value={typeof editForm.tenantId === 'string' ? editForm.tenantId : editForm.tenantId?._id || ''}
+                                        onChange={(e) => setEditForm({ ...editForm, tenantId: e.target.value })}
+                                        className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:border-indigo-500"
+                                    >
+                                        <option value="">Selecione um tenant</option>
+                                        {tenants.map((t) => (
+                                            <option key={t._id} value={t._id}>
+                                                {t.name} ({t._id})
+                                            </option>
+                                        ))}
+                                    </select>
+                                </div>
+                            )}
+
                             <div>
                                 <label className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider block mb-1">
                                     Nova Senha (opcional)

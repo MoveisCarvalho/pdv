@@ -23,7 +23,7 @@ export async function GET(request: NextRequest) {
         }
 
         const filter = token.role === 'super_admin' ? {} : { tenantId: token.tenantId };
-        const employees = await User.find(filter).select('-password').lean();
+        const employees = await User.find(filter).populate('tenantId', 'name').select('-password').lean();
         return NextResponse.json({ success: true, data: employees });
     } catch (error: any) {
         return NextResponse.json({ success: false, error: error.message }, { status: 400 });
@@ -43,7 +43,6 @@ export async function POST(request: NextRequest) {
         const body = await request.json();
         const { password, ...rest } = body;
 
-        // Validações básicas
         if (!rest.name) {
             return NextResponse.json({ success: false, error: 'Nome é obrigatório' }, { status: 400 });
         }
@@ -51,7 +50,6 @@ export async function POST(request: NextRequest) {
             return NextResponse.json({ success: false, error: 'E-mail é obrigatório' }, { status: 400 });
         }
 
-        // Define tenantId
         let tenantId;
         if (token.role === 'super_admin') {
             if (!rest.tenantId) {
@@ -71,7 +69,6 @@ export async function POST(request: NextRequest) {
             }
         }
 
-        // Hash da senha: usa a fornecida ou gera automática (CPF, telefone ou '123456')
         let hashedPassword;
         if (password) {
             hashedPassword = await bcrypt.hash(password, 10);
@@ -87,6 +84,7 @@ export async function POST(request: NextRequest) {
         };
 
         const employee = await User.create(userData);
+        await employee.populate('tenantId', 'name');
         const { password: _, ...employeeWithoutPassword } = employee.toObject();
 
         return NextResponse.json({ success: true, data: employeeWithoutPassword }, { status: 201 });

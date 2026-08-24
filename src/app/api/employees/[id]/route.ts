@@ -27,7 +27,7 @@ export async function GET(
 
         const { id } = await context.params;
         const filter = token.role === 'super_admin' ? { _id: id } : { _id: id, tenantId: token.tenantId };
-        const employee = await User.findOne(filter).select('-password').lean();
+        const employee = await User.findOne(filter).populate('tenantId', 'name').select('-password').lean();
 
         if (!employee) {
             return NextResponse.json({ success: false, error: 'Funcionário não encontrado' }, { status: 404 });
@@ -67,7 +67,7 @@ export async function PUT(
         const employee = await User.findOneAndUpdate(filter, updateData, {
             new: true,
             runValidators: true,
-        }).select('-password');
+        }).populate('tenantId', 'name').select('-password');
 
         if (!employee) {
             return NextResponse.json({ success: false, error: 'Funcionário não encontrado' }, { status: 404 });
