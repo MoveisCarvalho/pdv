@@ -1,8 +1,10 @@
-import { NextAuthOptions } from 'next-auth';
+import { NextAuthOptions, User as NextAuthUser } from 'next-auth';
 import CredentialsProvider from 'next-auth/providers/credentials';
 import dbConnect from './mongodb';
 import bcrypt from 'bcryptjs';
 import User from '../models/User';
+import Tenant from '../models/Tenant';
+import { Role } from './permissions';
 
 export const authOptions: NextAuthOptions = {
     providers: [
@@ -12,7 +14,7 @@ export const authOptions: NextAuthOptions = {
                 identifier: { label: 'Email / Telefone / CPF', type: 'text' },
                 password: { label: 'Senha', type: 'password' }
             },
-            async authorize(credentials) {
+            async authorize(credentials): Promise<NextAuthUser | null> {
                 await dbConnect();
 
                 const { identifier, password } = credentials as any;
@@ -32,30 +34,42 @@ export const authOptions: NextAuthOptions = {
                 const isValid = await bcrypt.compare(password, user.password);
                 if (!isValid) throw new Error('Senha incorreta');
 
+                // Buscar nome do tenant (se existir)
+                let tenantName: string | undefined = undefined;
+                if (user.tenantId) {
+                    const tenant = await Tenant.findById(user.tenantId).select('name').lean<{ name: string } | null>();
+                    if (tenant) {
+                        tenantName = tenant.name;
+                    }
+                }
+
                 // Retornar objeto com dados para a sessão
                 return {
                     id: user._id.toString(),
                     name: user.name,
                     email: user.email,
                     phone: user.phone,
-                    role: user.role,
-                    tenantId: user.tenantId?.toString() || null,
-                };
+                    role: user.role as Role, // cast explícito para Role
+                    tenantId: user.tenantId?.toString() ?? undefined, // null/undefined -> undefined
+                    tenantName, // adiciona o nome do tenant
+                } as NextAuthUser;
             }
         })
     ],
     callbacks: {
         async jwt({ token, user }) {
             if (user) {
-                token.role = user.role;
-                token.tenantId = user.tenantId;
+                token.role = user.role as Role; // cast explícito
+                token.tenantId = user.tenantId ?? undefined; // null/undefined -> undefined
+                token.tenantName = user.tenantName ?? undefined;
                 token.id = user.id;
             }
             return token;
         },
         async session({ session, token }) {
-            session.user.role = token.role as string;
-            session.user.tenantId = token.tenantId as string | null;
+            session.user.role = token.role as Role;
+            session.user.tenantId = token.tenantId ?? undefined; // null/undefined -> undefined
+            session.user.tenantName = token.tenantName ?? undefined;
             session.user.id = token.id as string;
             return session;
         }
