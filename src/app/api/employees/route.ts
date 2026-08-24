@@ -4,6 +4,7 @@ import User from '@/src/models/User';
 import { getToken } from 'next-auth/jwt';
 import { hasPermission } from '@/src/lib/permissions';
 import bcrypt from 'bcryptjs';
+import '@/src/models/Tenant'
 
 function unauthorized() {
     return NextResponse.json({ success: false, error: 'Não autorizado' }, { status: 401 });
