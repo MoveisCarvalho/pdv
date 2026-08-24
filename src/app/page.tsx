@@ -11,13 +11,14 @@ import {
   Package,
   LogOut,
   Lock,
-  Store
+  Store,
+  Building2
 } from "lucide-react";
 import Link from "next/link";
 import { signOut, useSession } from 'next-auth/react';
 import { hasPermission, type Role } from '@/src/lib/permissions';
 
-// Lista de módulos com permissões necessárias
+// Lista de módulos com permissões necessárias - ORDEM AJUSTADA
 const modules = [
   {
     href: '/pos',
@@ -32,6 +33,12 @@ const modules = [
     permission: 'view_orders'
   },
   {
+    href: '/admin',
+    icon: Package,
+    label: 'Gestão',
+    permission: 'view_products'
+  },
+  {
     href: '/mobile',
     icon: Smartphone,
     label: 'Pedido Mobile',
@@ -44,10 +51,10 @@ const modules = [
     permission: 'view_employees'
   },
   {
-    href: '/admin',
-    icon: Package,
-    label: 'Painel Admin',
-    permission: 'view_products'
+    href: '/tenants',
+    icon: Building2,
+    label: 'Empresas',
+    permission: 'view_tenants'
   },
 ];
 
@@ -82,6 +89,9 @@ export default function Home() {
               <>
                 <h1 className="text-3xl md:text-4xl font-bold text-slate-800 dark:text-slate-100">
                   {tenantName}
+                  <span className="ml-2 text-sm md:text-base font-medium text-slate-500 dark:text-slate-400">
+                    • PDV Master 4.0
+                  </span>
                 </h1>
                 <p className="text-md md:text-lg font-medium text-slate-600 dark:text-slate-300">
                   {userName} • <span className="text-indigo-600 dark:text-indigo-400">{userRoleLabel}</span>
@@ -120,7 +130,7 @@ export default function Home() {
 
         {/* ===== ATALHOS RÁPIDOS ===== */}
         {accessibleModules.length > 0 && (
-          <div className="grid grid-cols-2 md:grid-cols-5 gap-3 py-4 flex-shrink-0">
+          <div className="grid grid-cols-2 md:grid-cols-6 gap-3 py-4 flex-shrink-0">
             {accessibleModules.map((mod) => {
               const Icon = mod.icon;
               return (
@@ -141,15 +151,12 @@ export default function Home() {
         <div
           className="relative flex-1 rounded-2xl overflow-hidden mb-4"
           style={{
-            backgroundImage: `url('/pdvFundo.jfif')`,
+            backgroundImage: `url('/pdv.jfif')`,
             backgroundSize: 'cover',
             backgroundPosition: 'center',
           }}
         >
-          {/* Overlay escuro para legibilidade */}
           <div className="absolute inset-0 bg-black/40"></div>
-
-          {/* Conteúdo central */}
           <div className="relative z-10 h-full flex flex-col items-center justify-center text-center text-white px-4">
             <div className="flex justify-center mb-4">
               <div className="p-4 bg-white/20 backdrop-blur-sm rounded-full border border-white/30 shadow-xl">
@@ -160,7 +167,7 @@ export default function Home() {
               PDV
             </h1>
             <p className="mt-2 text-base md:text-lg font-light text-white/90 max-w-xl leading-relaxed">
-              Sistema completo de gestão para vendas, pedidos, estoque e equipe.
+              Sistema completo de gestão para vendas, pedidos e equipe.
               <br />
               <span className="text-xs opacity-80">Rápido, integrado e pronto para qualquer negócio.</span>
             </p>

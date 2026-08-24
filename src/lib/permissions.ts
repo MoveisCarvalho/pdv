@@ -12,12 +12,13 @@ const permissions: Record<Role, string[]> = {
         'view_orders', 'create_orders', 'update_orders',
         'view_products', 'create_products', 'update_products', 'delete_products',
         'view_tables', 'create_tables', 'delete_tables',
+        'view_tenants', 'update_tenants', // Admin pode ver e editar seu próprio tenant
     ],
 
     manager: [
         'view_addons', 'create_addons',
         'view_categories', 'create_categories',
-        'view_employees', // pode ver, mas não editar/criar/deletar
+        'view_employees',
         'view_orders', 'create_orders', 'update_orders',
         'view_products', 'create_products', 'update_products',
         'view_tables', 'create_tables',
@@ -55,8 +56,7 @@ export function hasPermission(role: string, action: string): boolean {
     if (role === 'super_admin') return true;
 
     const allowed = permissions[role as Role];
-    if (!allowed) return false; // role desconhecido
+    if (!allowed) return false;
 
-    // Se tiver '*' na lista, tem acesso a tudo (útil para super_admin, mas já tratamos)
     return allowed.includes('*') || allowed.includes(action);
 }
