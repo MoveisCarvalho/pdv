@@ -55,12 +55,10 @@ export async function PUT(
         const body = await request.json();
         const { password, ...updateData } = body;
 
-        // Impede alteração de tenantId por não-super_admin
         if (token.role !== 'super_admin' && updateData.tenantId) {
             delete updateData.tenantId;
         }
 
-        // Se forneceu senha, faz hash
         if (password) {
             updateData.password = await bcrypt.hash(password, 10);
         }

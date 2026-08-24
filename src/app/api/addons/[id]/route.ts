@@ -1,12 +1,12 @@
 import { NextResponse } from 'next/server';
-import type { NextRequest } from 'next/server'; // <-- importe o tipo
-import dbConnect from '@/src/lib/mongodb';       // ajuste o caminho conforme seu alias
+import type { NextRequest } from 'next/server';
+import dbConnect from '@/src/lib/mongodb';
 import Addon from '@/src/models/Addon';
 import { getToken } from 'next-auth/jwt';
 import { hasPermission } from '@/src/lib/permissions';
 
 export async function DELETE(
-    request: NextRequest, // <-- troque Request por NextRequest
+    request: NextRequest,
     context: { params: Promise<{ id: string }> }
 ) {
     try {
@@ -19,7 +19,6 @@ export async function DELETE(
             );
         }
 
-        // Verifica permissão (opcional, mas recomendado)
         if (!hasPermission(token.role as string, 'delete_addons') && token.role !== 'super_admin') {
             return NextResponse.json(
                 { success: false, error: 'Sem permissão' },
@@ -28,7 +27,6 @@ export async function DELETE(
         }
 
         const { id } = await context.params;
-        // Filtro por tenant (a menos que seja super_admin)
         const filter = token.role === 'super_admin'
             ? { _id: id }
             : { _id: id, tenantId: token.tenantId };

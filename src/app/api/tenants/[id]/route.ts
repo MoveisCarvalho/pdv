@@ -10,7 +10,7 @@ import slugify from 'slugify';
 // GET: Buscar um tenant específico
 export async function GET(
     request: NextRequest,
-    { params }: { params: { id: string } }
+    context: { params: Promise<{ id: string }> }
 ) {
     try {
         await dbConnect();
@@ -23,7 +23,7 @@ export async function GET(
             return NextResponse.json({ success: false, error: 'Sem permissão' }, { status: 403 });
         }
 
-        const { id } = await params;
+        const { id } = await context.params;
 
         // Filtro: se não for super_admin, só pode ver o próprio tenant
         let filter: any = { _id: id };
@@ -49,7 +49,7 @@ export async function GET(
 // PUT: Atualizar tenant
 export async function PUT(
     request: NextRequest,
-    { params }: { params: { id: string } }
+    context: { params: Promise<{ id: string }> }
 ) {
     try {
         await dbConnect();
@@ -62,7 +62,7 @@ export async function PUT(
             return NextResponse.json({ success: false, error: 'Sem permissão' }, { status: 403 });
         }
 
-        const { id } = await params;
+        const { id } = await context.params;
         const body = await request.json();
         const { name, cnpjCpf, phone, email, city, password } = body;
 
@@ -121,7 +121,7 @@ export async function PUT(
 // DELETE: Excluir tenant (apenas super_admin)
 export async function DELETE(
     request: NextRequest,
-    { params }: { params: { id: string } }
+    context: { params: Promise<{ id: string }> }
 ) {
     try {
         await dbConnect();
@@ -135,7 +135,7 @@ export async function DELETE(
             return NextResponse.json({ success: false, error: 'Apenas Super Admin pode excluir empresas' }, { status: 403 });
         }
 
-        const { id } = await params;
+        const { id } = await context.params;
         const tenant = await Tenant.findByIdAndDelete(id);
         if (!tenant) {
             return NextResponse.json({ success: false, error: 'Tenant não encontrado' }, { status: 404 });
