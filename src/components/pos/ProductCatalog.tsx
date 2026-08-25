@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState } from 'react';
-import { Search, Plus, Mic, MicOff } from 'lucide-react';
+import { Search, Plus, Mic, MicOff, X } from 'lucide-react';
 import AddItemModal from './AddItemModal';
 import { Product } from '@/src/types';
 
@@ -152,19 +152,24 @@ export default function ProductCatalog({
         setSelectedProduct(null);
     };
 
-    // --- Sistema Inteligente de Pontuação e Filtro Multicampo ---
+    // --- Sistema Inteligente de Pontuação e Filtro Multipalavra (OU lógico) ---
     const scoredProducts = products
         .map((p) => {
             const normalizedSearch = normalizeQuery(searchTerm);
             if (!normalizedSearch) return { product: p, score: 1 }; // Se busca vazia, mantém todos com score neutro
 
-            const strictSearch = normalizedSearch.replace(/\s/g, '');
             const numericSearchVal = parseSpokenToNumber(searchTerm);
 
             const normName = normalizeQuery(p.name);
             const strictName = normName.replace(/\s/g, '');
             const normCat = p.category ? normalizeQuery(p.category) : '';
             const normDesc = p.description ? normalizeQuery(p.description) : '';
+
+            // Texto unificado do produto para varredura de palavras
+            const fullProductText = `${normName} ${normCat} ${normDesc}`;
+
+            // Divide a pesquisa em tokens individuais (ex: "frango", "tubaina")
+            const searchTokens = normalizedSearch.split(' ').filter(Boolean);
 
             let score = 0;
 
@@ -173,23 +178,34 @@ export default function ProductCatalog({
                 score = Math.max(score, 100);
             }
 
-            // 2. Correspondência no Nome (Prioridade máxima para palavras compostas exatas como "X-tudo")
-            if (normName === normalizedSearch || strictName === strictSearch) {
-                score = Math.max(score, 90);
-            } else if (normName.startsWith(normalizedSearch) || strictName.startsWith(strictSearch)) {
-                score = Math.max(score, 75);
-            } else if (normName.includes(normalizedSearch) || strictName.includes(strictSearch)) {
-                score = Math.max(score, 60);
-            }
+            // 2. Validação por Token Individual (Lógica OU: retorna se contiver *qualquer* uma das palavras)
+            if (searchTokens.length > 0) {
+                let matchCount = 0;
+                let nameMatchCount = 0;
 
-            // 3. Correspondência na Categoria
-            if (normCat.includes(normalizedSearch) || normCat.replace(/\s/g, '').includes(strictSearch)) {
-                score = Math.max(score, 40);
-            }
+                for (const token of searchTokens) {
+                    if (fullProductText.includes(token)) {
+                        matchCount++;
+                    }
+                    if (normName.includes(token)) {
+                        nameMatchCount++;
+                    }
+                }
 
-            // 4. Correspondência na Descrição (Pedaços ou palavras inteiras)
-            if (normDesc.includes(normalizedSearch) || normDesc.replace(/\s/g, '').includes(strictSearch)) {
-                score = Math.max(score, 20);
+                // Se encontrou pelo menos uma das palavras, pontua o produto
+                if (matchCount > 0) {
+                    score = Math.max(score, 40 + (matchCount * 10));
+
+                    // Bônus se as palavras estiverem no nome do produto
+                    if (nameMatchCount > 0) {
+                        score = Math.max(score, 60 + (nameMatchCount * 15));
+                    }
+
+                    // Correspondência exata da frase completa
+                    if (normName === normalizedSearch || strictName === normalizedSearch.replace(/\s/g, '')) {
+                        score = Math.max(score, 95);
+                    }
+                }
             }
 
             return { product: p, score };
@@ -200,7 +216,7 @@ export default function ProductCatalog({
     const filteredProducts = scoredProducts
         .sort((a, b) => {
             if (b.score !== a.score) {
-                return b.score - a.score; // Maior pontuação (ex: correspondência exata) vem primeiro
+                return b.score - a.score; // Maior pontuação vem primeiro
             }
             const catA = a.product.category || 'Geral';
             const catB = b.product.category || 'Geral';
@@ -230,7 +246,7 @@ export default function ProductCatalog({
                         </span>
                     </div>
 
-                    {/* Input de Busca com Microfone Embutido */}
+                    {/* Input de Busca com Microfone Embutido e Limpeza */}
                     <div className="relative w-full sm:w-64 flex items-center">
                         <Search size={15} className="absolute left-3 text-slate-400 pointer-events-none" />
                         <input
@@ -238,22 +254,34 @@ export default function ProductCatalog({
                             value={searchTerm}
                             onChange={(e) => onSearchChange(e.target.value)}
                             placeholder={isListening ? "Ouvindo..." : "Buscar produto, valor ou falar..."}
-                            className={`w-full bg-slate-50 dark:bg-slate-950 border rounded-xl pl-9 pr-10 py-1.5 text-xs focus:outline-none transition-colors ${isListening
-                                    ? 'border-red-500 ring-1 ring-red-500 animate-pulse'
-                                    : 'border-slate-200 dark:border-slate-800 focus:border-indigo-500'
+                            className={`w-full bg-slate-50 dark:bg-slate-950 border rounded-xl pl-9 pr-16 py-1.5 text-xs focus:outline-none transition-colors ${isListening
+                                ? 'border-red-500 ring-1 ring-red-500 animate-pulse'
+                                : 'border-slate-200 dark:border-slate-800 focus:border-indigo-500'
                                 }`}
                         />
-                        <button
-                            type="button"
-                            onClick={handleVoiceSearch}
-                            title="Pesquisar por voz"
-                            className={`absolute right-1.5 p-1 rounded-lg transition-colors ${isListening
+                        <div className="absolute right-1.5 flex items-center gap-0.5">
+                            {searchTerm && (
+                                <button
+                                    type="button"
+                                    onClick={() => onSearchChange('')}
+                                    title="Limpar pesquisa"
+                                    className="p-1 rounded-lg text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 hover:bg-slate-200 dark:hover:bg-slate-800 transition-colors"
+                                >
+                                    <X size={14} />
+                                </button>
+                            )}
+                            <button
+                                type="button"
+                                onClick={handleVoiceSearch}
+                                title="Pesquisar por voz"
+                                className={`p-1 rounded-lg transition-colors ${isListening
                                     ? 'bg-red-500 text-white animate-bounce'
                                     : 'text-slate-400 hover:text-indigo-600 dark:hover:text-indigo-400 hover:bg-slate-200 dark:hover:bg-slate-800'
-                                }`}
-                        >
-                            {isListening ? <MicOff size={14} /> : <Mic size={14} />}
-                        </button>
+                                    }`}
+                            >
+                                {isListening ? <MicOff size={14} /> : <Mic size={14} />}
+                            </button>
+                        </div>
                     </div>
                 </div>
 
