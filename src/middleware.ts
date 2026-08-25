@@ -12,8 +12,13 @@ export async function middleware(request: NextRequest) {
     // Verifica se a rota é pública
     const isPublic = publicRoutes.some(route => pathname.startsWith(route));
 
-    // Se não estiver logado e não for pública, redireciona para login
+    // Se não estiver logado e não for pública, trata o bloqueio
     if (!token && !isPublic) {
+        // CORREÇÃO: Se for uma rota de API, retorna JSON 401 em vez de redirecionar (evita o TypeError no fetch)
+        if (pathname.startsWith('/api/')) {
+            return NextResponse.json({ success: false, error: 'Não autorizado' }, { status: 401 });
+        }
+
         const url = new URL('/login', request.url);
         url.searchParams.set('callbackUrl', pathname);
         return NextResponse.redirect(url);
@@ -25,20 +30,14 @@ export async function middleware(request: NextRequest) {
     }
 
     // --- Identificação do tenant ---
-    // Vamos usar o hostname (subdomínio) como slug do tenant.
-    // Exemplo: loja1.localhost:3000 -> slug = 'loja1'
-    // Em produção, use o domínio real.
     let tenantSlug = null;
     const host = request.headers.get('host') || '';
-    // Se for localhost, podemos extrair da query string ou usar um padrão
     if (host.includes('localhost')) {
-        // Pega o subdomínio (parte antes do primeiro ponto)
         const parts = host.split('.');
         if (parts.length > 1 && parts[0] !== 'www') {
             tenantSlug = parts[0];
         }
     } else {
-        // Em produção, extraia do domínio: tenant.meusistema.com
         const parts = host.split('.');
         if (parts.length > 2) {
             tenantSlug = parts[0];
@@ -49,12 +48,6 @@ export async function middleware(request: NextRequest) {
     if (!tenantSlug) {
         tenantSlug = request.nextUrl.searchParams.get('tenant');
     }
-
-    // Se o usuário está logado e é super_admin, podemos permitir acesso a qualquer tenant
-    // ou redirecionar para um painel de super admin.
-    // Para simplificar, se for super_admin, ignora o tenant e deixa ele acessar tudo.
-    // Mas precisamos passar o tenantSlug no request para as rotas de API saberem qual tenant consultar.
-    // Vamos anexar no header para ser lido nas rotas.
 
     const requestHeaders = new Headers(request.headers);
     if (tenantSlug) {

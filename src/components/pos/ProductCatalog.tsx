@@ -1,5 +1,7 @@
+'use client';
+
 import React, { useState } from 'react';
-import { Search, Plus } from 'lucide-react';
+import { Search, Plus, Mic, MicOff } from 'lucide-react';
 import AddItemModal from './AddItemModal';
 import { Product } from '@/src/types';
 
@@ -20,12 +22,116 @@ export default function ProductCatalog({
 }: ProductCatalogProps) {
     const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
     const [modalOpen, setModalOpen] = useState(false);
+    const [isListening, setIsListening] = useState(false);
 
     // Estado para expansão da descrição no Catálogo (Evita conflitos de clique)
     const [expandedDesc, setExpandedDesc] = useState<Record<string, boolean>>({});
     const toggleDesc = (id: string, e: React.MouseEvent) => {
         e.stopPropagation(); // Evita abrir o modal de adição ao clicar na descrição
         setExpandedDesc(prev => ({ ...prev, [id]: !prev[id] }));
+    };
+
+    // --- Conversor Inteligente de Voz para Número/Preço ---
+    const parseSpokenToNumber = (text: string): number | null => {
+        let clean = text.toLowerCase()
+            .replace(/r\$/g, '')
+            .replace(/reais/g, '')
+            .replace(/real/g, '')
+            .replace(/centavos/g, '')
+            .trim();
+
+        // Tenta capturar formato numérico direto (ex: 15, 15.50, 15,50)
+        const numericMatch = clean.replace(',', '.').match(/(\d+(\.\d+)?)/);
+        if (numericMatch && !isNaN(Number(numericMatch[1]))) {
+            return Number(numericMatch[1]);
+        }
+
+        // Mapeamento básico de números falados em português
+        const wordsMap: Record<string, number> = {
+            'um': 1, 'uma': 1, 'dois': 2, 'duas': 2, 'tres': 3, 'quatro': 4, 'cinco': 5,
+            'seis': 6, 'sete': 7, 'oito': 8, 'nove': 9, 'dez': 10,
+            'onze': 11, 'doze': 12, 'treze': 13, 'quatorze': 14, 'quinze': 15,
+            'dezesseis': 16, 'dezessete': 17, 'dezoito': 18, 'dezenove': 19,
+            'vinte': 20, 'trinta': 30, 'quarenta': 40, 'cinquenta': 50,
+            'sessenta': 60, 'setenta': 70, 'oitenta': 80, 'noventa': 90,
+            'cem': 100, 'cento': 100, 'duzentos': 200, 'trezentos': 300,
+            'quatrocentos': 400, 'quinhentos': 500, 'seiscentos': 600,
+            'setecentos': 700, 'oitocentos': 800, 'novecentos': 900, 'mil': 1000
+        };
+
+        const tokens = clean.split(/\s+e\s+|\s+/);
+        let total = 0;
+        let current = 0;
+        let found = false;
+
+        for (const token of tokens) {
+            if (wordsMap[token] !== undefined) {
+                current += wordsMap[token];
+                found = true;
+            } else if (token === 'e') {
+                continue;
+            }
+        }
+
+        if (found) {
+            return total + current;
+        }
+
+        return null;
+    };
+
+    // --- Lógica de Reconhecimento de Voz com Correção Fonética ---
+    const handleVoiceSearch = () => {
+        if (typeof window === 'undefined') return;
+
+        const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+
+        if (!SpeechRecognition) {
+            alert('Seu navegador não suporta pesquisa por voz. Tente usar o Google Chrome.');
+            return;
+        }
+
+        const recognition = new SpeechRecognition();
+        recognition.lang = 'pt-BR';
+        recognition.interimResults = false;
+        recognition.maxAlternatives = 1;
+
+        recognition.onstart = () => {
+            setIsListening(true);
+        };
+
+        recognition.onresult = (event: any) => {
+            let speechText = event.results[0][0].transcript.toLowerCase();
+
+            // Corrige automaticamente variações fonéticas comuns (ex: "xis" -> "x")
+            speechText = speechText.replace(/\bxis\b/g, 'x');
+            speechText = speechText.replace(/\bces\b/g, 'c');
+
+            const cleanText = speechText.replace(/\.$/, '').trim();
+            onSearchChange(cleanText);
+        };
+
+        recognition.onerror = (event: any) => {
+            console.error('Erro no reconhecimento de voz:', event.error);
+            setIsListening(false);
+        };
+
+        recognition.onend = () => {
+            setIsListening(false);
+        };
+
+        recognition.start();
+    };
+
+    // Função auxiliar para padronizar textos (remove acentos, hífens e espaços extras)
+    const normalizeQuery = (str: string) => {
+        return str
+            .toLowerCase()
+            .normalize('NFD')
+            .replace(/[\u0300-\u036f]/g, '') // Remove acentos
+            .replace(/[-_]/g, ' ')           // Transforma hífens e underlines em espaços
+            .replace(/\s+/g, ' ')            // Remove espaços duplos
+            .trim();
     };
 
     const handleProductClick = (product: Product) => {
@@ -46,19 +152,63 @@ export default function ProductCatalog({
         setSelectedProduct(null);
     };
 
-    const filteredProducts = products
-        .filter(
-            (p) =>
-                p.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                (p.category && p.category.toLowerCase().includes(searchTerm.toLowerCase()))
-        )
+    // --- Sistema Inteligente de Pontuação e Filtro Multicampo ---
+    const scoredProducts = products
+        .map((p) => {
+            const normalizedSearch = normalizeQuery(searchTerm);
+            if (!normalizedSearch) return { product: p, score: 1 }; // Se busca vazia, mantém todos com score neutro
+
+            const strictSearch = normalizedSearch.replace(/\s/g, '');
+            const numericSearchVal = parseSpokenToNumber(searchTerm);
+
+            const normName = normalizeQuery(p.name);
+            const strictName = normName.replace(/\s/g, '');
+            const normCat = p.category ? normalizeQuery(p.category) : '';
+            const normDesc = p.description ? normalizeQuery(p.description) : '';
+
+            let score = 0;
+
+            // 1. Verificação de Preço (Conversão de voz para número)
+            if (numericSearchVal !== null && Math.abs(p.price - numericSearchVal) < 0.01) {
+                score = Math.max(score, 100);
+            }
+
+            // 2. Correspondência no Nome (Prioridade máxima para palavras compostas exatas como "X-tudo")
+            if (normName === normalizedSearch || strictName === strictSearch) {
+                score = Math.max(score, 90);
+            } else if (normName.startsWith(normalizedSearch) || strictName.startsWith(strictSearch)) {
+                score = Math.max(score, 75);
+            } else if (normName.includes(normalizedSearch) || strictName.includes(strictSearch)) {
+                score = Math.max(score, 60);
+            }
+
+            // 3. Correspondência na Categoria
+            if (normCat.includes(normalizedSearch) || normCat.replace(/\s/g, '').includes(strictSearch)) {
+                score = Math.max(score, 40);
+            }
+
+            // 4. Correspondência na Descrição (Pedaços ou palavras inteiras)
+            if (normDesc.includes(normalizedSearch) || normDesc.replace(/\s/g, '').includes(strictSearch)) {
+                score = Math.max(score, 20);
+            }
+
+            return { product: p, score };
+        })
+        .filter((item) => item.score > 0);
+
+    // Ordena globalmente por relevância (score decrescente) e depois por categoria/nome
+    const filteredProducts = scoredProducts
         .sort((a, b) => {
-            const catA = a.category || 'Geral';
-            const catB = b.category || 'Geral';
+            if (b.score !== a.score) {
+                return b.score - a.score; // Maior pontuação (ex: correspondência exata) vem primeiro
+            }
+            const catA = a.product.category || 'Geral';
+            const catB = b.product.category || 'Geral';
             const categoryCompare = catA.localeCompare(catB, 'pt-BR', { sensitivity: 'accent' });
             if (categoryCompare !== 0) return categoryCompare;
-            return a.name.localeCompare(b.name, 'pt-BR', { sensitivity: 'accent' });
-        });
+            return a.product.name.localeCompare(b.product.name, 'pt-BR', { sensitivity: 'accent' });
+        })
+        .map((item) => item.product);
 
     const groupedProducts = filteredProducts.reduce((acc, prod) => {
         const cat = prod.category || 'Geral';
@@ -79,15 +229,31 @@ export default function ProductCatalog({
                             {filteredProducts.length} itens
                         </span>
                     </div>
-                    <div className="relative w-full sm:w-48">
-                        <Search size={15} className="absolute left-3 top-2.5 text-slate-400" />
+
+                    {/* Input de Busca com Microfone Embutido */}
+                    <div className="relative w-full sm:w-64 flex items-center">
+                        <Search size={15} className="absolute left-3 text-slate-400 pointer-events-none" />
                         <input
                             type="text"
                             value={searchTerm}
                             onChange={(e) => onSearchChange(e.target.value)}
-                            placeholder="Buscar produto..."
-                            className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl pl-9 pr-3 py-1.5 text-xs focus:outline-none focus:border-indigo-500 transition-colors"
+                            placeholder={isListening ? "Ouvindo..." : "Buscar produto, valor ou falar..."}
+                            className={`w-full bg-slate-50 dark:bg-slate-950 border rounded-xl pl-9 pr-10 py-1.5 text-xs focus:outline-none transition-colors ${isListening
+                                    ? 'border-red-500 ring-1 ring-red-500 animate-pulse'
+                                    : 'border-slate-200 dark:border-slate-800 focus:border-indigo-500'
+                                }`}
                         />
+                        <button
+                            type="button"
+                            onClick={handleVoiceSearch}
+                            title="Pesquisar por voz"
+                            className={`absolute right-1.5 p-1 rounded-lg transition-colors ${isListening
+                                    ? 'bg-red-500 text-white animate-bounce'
+                                    : 'text-slate-400 hover:text-indigo-600 dark:hover:text-indigo-400 hover:bg-slate-200 dark:hover:bg-slate-800'
+                                }`}
+                        >
+                            {isListening ? <MicOff size={14} /> : <Mic size={14} />}
+                        </button>
                     </div>
                 </div>
 
@@ -121,7 +287,6 @@ export default function ProductCatalog({
                                                     {prod.name}
                                                 </h3>
 
-                                                {/* Substituindo a visualização da categoria pela descrição truncada com clique */}
                                                 <div
                                                     className="text-[9px] text-slate-500 dark:text-slate-400 mt-0.5 text-left cursor-pointer"
                                                     onClick={(e) => toggleDesc(prod._id, e)}

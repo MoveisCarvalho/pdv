@@ -7,7 +7,7 @@ import { OrderItem } from '@/src/types';
 interface OpenOrder {
     _id: string;
     table: string;
-    customerName?: string; // <-- NOVO
+    customerName?: string;
     items: OrderItem[];
     total: number;
     status: string;
@@ -18,7 +18,7 @@ interface OpenTablesListProps {
     onRefresh: () => void;
     onSelectOpenOrder?: (order: OpenOrder) => void;
     onUpdateOpenTables?: (tables: string[]) => void;
-    onUpdateOrders?: (orders: OpenOrder[]) => void; // <-- NOVO
+    onUpdateOrders?: (orders: OpenOrder[]) => void;
 }
 
 export default function OpenTablesList({ onRefresh, onSelectOpenOrder, onUpdateOpenTables, onUpdateOrders }: OpenTablesListProps) {
@@ -32,7 +32,16 @@ export default function OpenTablesList({ onRefresh, onSelectOpenOrder, onUpdateO
 
     const fetchOpenOrders = async () => {
         try {
-            const res = await fetch('/api/orders');
+            const res = await fetch('/api/orders', {
+                method: 'GET',
+                headers: { 'Content-Type': 'application/json' },
+                cache: 'no-store'
+            });
+
+            if (!res.ok) {
+                throw new Error(`Erro HTTP: ${res.status}`);
+            }
+
             const json = await res.json();
             if (json.success) {
                 const active = json.data.filter((o: OpenOrder) => o.status !== 'pago' && o.status !== 'cancelado');
@@ -41,11 +50,11 @@ export default function OpenTablesList({ onRefresh, onSelectOpenOrder, onUpdateO
                     onUpdateOpenTables(active.map((o: OpenOrder) => o.table));
                 }
                 if (onUpdateOrders) {
-                    onUpdateOrders(active); // <-- passa a lista completa para o pai
+                    onUpdateOrders(active);
                 }
             }
         } catch (err) {
-            console.error(err);
+            console.error('Falha ao buscar comandas abertas:', err);
         } finally {
             setLoading(false);
         }
@@ -110,8 +119,6 @@ export default function OpenTablesList({ onRefresh, onSelectOpenOrder, onUpdateO
                     const dateObj = new Date(order.createdAt);
                     const formattedDate = dateObj.toLocaleDateString('pt-BR');
                     const formattedTime = dateObj.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
-
-                    // Monta o identificador com o nome do cliente, se houver
                     const displayName = order.customerName ? `${order.table} - ${order.customerName}` : order.table;
 
                     return (
@@ -175,7 +182,6 @@ export default function OpenTablesList({ onRefresh, onSelectOpenOrder, onUpdateO
                 })}
             </div>
 
-            {/* Modal de Cancelamento (mesmo código) */}
             {isCancelModalOpen && (
                 <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 backdrop-blur-xs p-4">
                     <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl w-full max-w-md p-6 shadow-2xl">

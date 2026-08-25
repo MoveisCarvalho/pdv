@@ -5,7 +5,7 @@ const ProductSchema = new Schema({
     tenantId: { type: Schema.Types.ObjectId, ref: 'Tenant', required: true, index: true },
     name: { type: String, required: true },
     description: { type: String, default: '' },
-    sku: { type: String, sparse: true },
+    sku: { type: String },
     price: { type: Number, required: true },
     cost: { type: Number, required: true },
     stock: { type: Number, default: 0 },
@@ -16,7 +16,14 @@ const ProductSchema = new Schema({
     }]
 }, { timestamps: true });
 
-// Garante que o SKU seja único por tenant (permite SKUs iguais entre empresas diferentes, mas não dentro da mesma)
-ProductSchema.index({ sku: 1, tenantId: 1 }, { unique: true, sparse: true });
+// Garante que o SKU seja único por tenant APENAS se preenchido.
+ProductSchema.index(
+    { sku: 1, tenantId: 1 },
+    {
+        unique: true,
+        sparse: true,
+        partialFilterExpression: { sku: { $exists: true, $nin: [null, ""] } }
+    }
+);
 
 export default models.Product || model('Product', ProductSchema);

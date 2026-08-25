@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useEffect, useRef } from 'react';
-import { ShoppingCart, ArrowLeft, X } from 'lucide-react';
+import { ShoppingCart, ArrowLeft, X, Mic, MicOff } from 'lucide-react';
 import Link from 'next/link';
 import Tooltip from '@/src/components/Tooltip';
 import ThemeToggle from '@/src/components/ThemeToggle';
@@ -49,9 +49,10 @@ export default function POSPage() {
     const [editingItem, setEditingItem] = useState<CartItem | null>(null);
     const [isEditModalOpen, setIsEditModalOpen] = useState(false);
 
-    // Estados para o modal de nome do cliente
+    // Estados para o modal de nome do cliente e voz
     const [isCustomerNameModalOpen, setIsCustomerNameModalOpen] = useState(false);
     const [tempCustomerName, setTempCustomerName] = useState('');
+    const [isCustomerListening, setIsCustomerListening] = useState(false);
 
     // REF para a seção do carrinho
     const cartSectionRef = useRef<HTMLDivElement>(null);
@@ -136,6 +137,50 @@ export default function POSPage() {
         setSelectedTable(tableName);
         setTempCustomerName('');
         setIsCustomerNameModalOpen(true);
+    };
+
+    // --- Reconhecimento de Voz com Ajustes de Dicção para o Nome do Cliente ---
+    const handleVoiceCustomerName = () => {
+        if (typeof window === 'undefined') return;
+
+        const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+
+        if (!SpeechRecognition) {
+            alert('Seu navegador não suporta reconhecimento de voz. Tente usar o Google Chrome.');
+            return;
+        }
+
+        const recognition = new SpeechRecognition();
+        recognition.lang = 'pt-BR';
+        recognition.interimResults = false;
+        recognition.maxAlternatives = 1;
+
+        recognition.onstart = () => {
+            setIsCustomerListening(true);
+        };
+
+        recognition.onresult = (event: any) => {
+            let speechText = event.results[0][0].transcript.trim();
+
+            // Ajuste de dicção e capitalização automática para nomes próprios
+            const formattedName = speechText
+                .toLowerCase()
+                .replace(/(^\w{1}|\s+\w{1})/g, (letter:any) => letter.toUpperCase());
+
+            setTempCustomerName(formattedName);
+            setIsCustomerListening(false);
+        };
+
+        recognition.onerror = (event: any) => {
+            console.error('Erro no reconhecimento de voz:', event.error);
+            setIsCustomerListening(false);
+        };
+
+        recognition.onend = () => {
+            setIsCustomerListening(false);
+        };
+
+        recognition.start();
     };
 
     const handleCustomerNameConfirm = () => {
@@ -467,7 +512,7 @@ export default function POSPage() {
                 </div>
             </div>
 
-            {/* Modal para inserir nome do cliente */}
+            {/* Modal para inserir nome do cliente com Suporte a Voz e Ajustes de Dicção */}
             {isCustomerNameModalOpen && (
                 <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 backdrop-blur-xs p-4">
                     <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl w-full max-w-md p-6 shadow-2xl">
@@ -483,19 +528,38 @@ export default function POSPage() {
                             </button>
                         </div>
                         <p className="text-xs text-slate-500 dark:text-slate-400 mb-3">
-                            Digite um nome ou identificador para esta comanda (ex: “João”, “Balcão - Maria”).
+                            Digite ou fale o nome ou identificador para esta comanda (ex: “João”, “Balcão - Maria”).
                         </p>
-                        <input
-                            type="text"
-                            value={tempCustomerName}
-                            onChange={(e) => setTempCustomerName(e.target.value)}
-                            placeholder="Ex: João Silva"
-                            className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-300 dark:border-slate-700 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:border-indigo-500 mb-4"
-                            autoFocus
-                            onKeyDown={(e) => {
-                                if (e.key === 'Enter') handleCustomerNameConfirm();
-                            }}
-                        />
+
+                        {/* Input com botão de voz integrado */}
+                        <div className="relative w-full flex items-center mb-4">
+                            <input
+                                type="text"
+                                value={tempCustomerName}
+                                onChange={(e) => setTempCustomerName(e.target.value)}
+                                placeholder={isCustomerListening ? "Ouvindo nome..." : "Ex: João Silva"}
+                                className={`w-full bg-slate-50 dark:bg-slate-950 border rounded-xl pl-3 pr-10 py-2.5 text-sm focus:outline-none transition-colors ${isCustomerListening
+                                        ? 'border-red-500 ring-1 ring-red-500 animate-pulse'
+                                        : 'border-slate-300 dark:border-slate-700 focus:border-indigo-500'
+                                    }`}
+                                autoFocus
+                                onKeyDown={(e) => {
+                                    if (e.key === 'Enter') handleCustomerNameConfirm();
+                                }}
+                            />
+                            <button
+                                type="button"
+                                onClick={handleVoiceCustomerName}
+                                title="Falar nome do cliente"
+                                className={`absolute right-1.5 p-1.5 rounded-lg transition-colors ${isCustomerListening
+                                        ? 'bg-red-500 text-white animate-bounce'
+                                        : 'text-slate-400 hover:text-indigo-600 dark:hover:text-indigo-400 hover:bg-slate-200 dark:hover:bg-slate-800'
+                                    }`}
+                            >
+                                {isCustomerListening ? <MicOff size={16} /> : <Mic size={16} />}
+                            </button>
+                        </div>
+
                         <div className="flex justify-end gap-2">
                             <button
                                 type="button"
