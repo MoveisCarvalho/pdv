@@ -19,6 +19,7 @@ export interface IOrderItem {
 
 // Interface principal do pedido
 export interface IOrder extends Document {
+    tenantId: mongoose.Types.ObjectId; // <-- ADICIONADO AQUI
     table: string;
     customerName?: string;    // <-- NOVO campo
     items: IOrderItem[];
@@ -55,8 +56,14 @@ const OrderItemSchema = new Schema({
 // Schema principal do pedido
 const OrderSchema = new Schema(
     {
+        tenantId: {
+            type: Schema.Types.ObjectId,
+            ref: 'Tenant',
+            required: true,
+            index: true
+        }, // <-- ADICIONADO AQUI
         table: { type: String, required: true },
-        customerName: { type: String }, // <-- NOVO campo
+        customerName: { type: String },
         items: [OrderItemSchema],
         total: { type: Number, required: true },
         paymentMethod: { type: String, default: 'pendente' },

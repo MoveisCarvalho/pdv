@@ -600,7 +600,7 @@ export default function KDSPage() {
 
                                             return (
                                                 <div
-                                                    key={item._id || idx}
+                                                    key={`${order._id}-${item._id || 'item'}-${idx}`}
                                                     className={`flex flex-col gap-2 text-sm p-3 rounded-xl border transition-all ${isConcluded
                                                         ? 'border-amber-300 dark:border-amber-900/50 bg-amber-50/40 dark:bg-amber-950/20'
                                                         : 'border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950/50'

@@ -16,7 +16,10 @@ export async function GET(request: NextRequest) {
             return NextResponse.json({ success: false, error: 'Sem permissão' }, { status: 403 });
         }
 
-        const filter = token.role === 'super_admin' ? {} : { tenantId: token.tenantId };
+        // Filtra por tenantId do usuário atual (mesmo para super_admin quando vinculado a um tenant)
+        const tenantId = token.tenantId;
+        const filter = tenantId ? { tenantId } : {};
+
         const categories = await Category.find(filter).sort({ name: 1 });
         return NextResponse.json({ success: true, data: categories }, { status: 200 });
     } catch (error: any) {
@@ -35,17 +38,39 @@ export async function POST(request: NextRequest) {
             return NextResponse.json({ success: false, error: 'Sem permissão' }, { status: 403 });
         }
 
-        const { name } = await request.json();
-        if (!name) return NextResponse.json({ success: false, error: 'Nome obrigatório' }, { status: 400 });
-
-        const filter = token.role === 'super_admin' ? { name: name.trim() } : { name: name.trim(), tenantId: token.tenantId };
-        let category = await Category.findOne(filter);
-        if (!category) {
-            const data = token.role === 'super_admin' ? { name: name.trim() } : { name: name.trim(), tenantId: token.tenantId };
-            category = await Category.create(data);
+        const body = await request.json();
+        const name = body.name ? body.name.trim() : '';
+        if (!name) {
+            return NextResponse.json({ success: false, error: 'Nome obrigatório' }, { status: 400 });
         }
+
+        const tenantId = body.tenantId || token.tenantId;
+        if (!tenantId) {
+            return NextResponse.json(
+                { success: false, error: 'Nenhum estabelecimento (Tenant) associado para realizar o cadastro.' },
+                { status: 400 }
+            );
+        }
+
+        // Verifica de forma case-insensitive dentro do mesmo tenantId
+        const existingCategory = await Category.findOne({
+            name: { $regex: new RegExp(`^${name}$`, 'i') },
+            tenantId,
+        });
+
+        if (existingCategory) {
+            return NextResponse.json({ success: true, data: existingCategory }, { status: 200 });
+        }
+
+        const category = await Category.create({ name, tenantId });
         return NextResponse.json({ success: true, data: category }, { status: 201 });
     } catch (error: any) {
+        if (error.code === 11000) {
+            return NextResponse.json(
+                { success: false, error: 'Já existe uma categoria cadastrada com este nome neste estabelecimento.' },
+                { status: 400 }
+            );
+        }
         return NextResponse.json({ success: false, error: error.message }, { status: 400 });
     }
 }

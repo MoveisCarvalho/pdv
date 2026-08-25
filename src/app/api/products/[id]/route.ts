@@ -22,6 +22,15 @@ export async function PUT(
         const { id } = await context.params;
         const body = await request.json();
 
+        // Impede alteração maliciosa do tenantId por usuários comuns
+        if (token.role !== 'super_admin') {
+            delete body.tenantId;
+        }
+
+        if (body.sku === '' || body.sku === undefined) {
+            body.sku = undefined;
+        }
+
         const filter = token.role === 'super_admin' ? { _id: id } : { _id: id, tenantId: token.tenantId };
         const updatedProduct = await Product.findOneAndUpdate(filter, body, {
             new: true,
@@ -29,10 +38,14 @@ export async function PUT(
         });
 
         if (!updatedProduct) {
-            return NextResponse.json({ success: false, error: 'Produto não encontrado' }, { status: 404 });
+            return NextResponse.json({ success: false, error: 'Produto não encontrado ou sem permissão' }, { status: 404 });
         }
+
         return NextResponse.json({ success: true, data: updatedProduct }, { status: 200 });
     } catch (error: any) {
+        if (error.code === 11000) {
+            return NextResponse.json({ success: false, error: 'Já existe um produto cadastrado com este SKU neste estabelecimento.' }, { status: 400 });
+        }
         return NextResponse.json({ success: false, error: error.message }, { status: 400 });
     }
 }
@@ -56,8 +69,9 @@ export async function DELETE(
         const deletedProduct = await Product.findOneAndDelete(filter);
 
         if (!deletedProduct) {
-            return NextResponse.json({ success: false, error: 'Produto não encontrado' }, { status: 404 });
+            return NextResponse.json({ success: false, error: 'Produto não encontrado ou sem permissão' }, { status: 404 });
         }
+
         return NextResponse.json({ success: true, data: {} }, { status: 200 });
     } catch (error: any) {
         return NextResponse.json({ success: false, error: error.message }, { status: 400 });

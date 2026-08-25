@@ -1,6 +1,7 @@
 // src/app/api/products/route.ts
 import dbConnect from '@/src/lib/mongodb';
 import Product from '@/src/models/Product';
+import Category from '@/src/models/Category';
 import { NextRequest, NextResponse } from 'next/server';
 import { getToken } from 'next-auth/jwt';
 import { hasPermission } from '@/src/lib/permissions';
@@ -16,8 +17,10 @@ export async function GET(request: NextRequest) {
             return NextResponse.json({ success: false, error: 'Sem permissão' }, { status: 403 });
         }
 
-        const filter = token.role === 'super_admin' ? {} : { tenantId: token.tenantId };
-        const products = await Product.find(filter);
+        const tenantId = token.tenantId;
+        const filter = tenantId ? { tenantId } : {};
+        const products = await Product.find(filter).sort({ name: 1 });
+
         return NextResponse.json({ success: true, data: products }, { status: 200 });
     } catch (error: any) {
         return NextResponse.json({ success: false, error: error.message }, { status: 400 });
@@ -36,10 +39,48 @@ export async function POST(request: NextRequest) {
         }
 
         const body = await request.json();
-        const data = token.role === 'super_admin' ? body : { ...body, tenantId: token.tenantId };
+        const tenantId = body.tenantId || token.tenantId;
+
+        if (!tenantId) {
+            return NextResponse.json(
+                { success: false, error: 'Nenhum estabelecimento (Tenant) associado para realizar o cadastro.' },
+                { status: 400 }
+            );
+        }
+
+        // Caso tenha informado uma categoria em formato texto, verifica/insere na collection de Categorias
+        if (body.category && typeof body.category === 'string') {
+            const categoryName = body.category.trim();
+            if (categoryName) {
+                const existingCategory = await Category.findOne({
+                    name: { $regex: new RegExp(`^${categoryName}$`, 'i') },
+                    tenantId,
+                });
+
+                if (!existingCategory) {
+                    await Category.create({
+                        name: categoryName,
+                        tenantId,
+                    });
+                }
+            }
+        }
+
+        const data = { ...body, tenantId };
+
+        if (data.sku === '' || data.sku === undefined) {
+            delete data.sku;
+        }
+
         const product = await Product.create(data);
         return NextResponse.json({ success: true, data: product }, { status: 201 });
     } catch (error: any) {
+        if (error.code === 11000) {
+            return NextResponse.json(
+                { success: false, error: 'Já existe um produto cadastrado com este SKU neste estabelecimento.' },
+                { status: 400 }
+            );
+        }
         return NextResponse.json({ success: false, error: error.message }, { status: 400 });
     }
 }

@@ -1,9 +1,11 @@
+// src/models/Product.ts
 import mongoose, { Schema, models, model } from 'mongoose';
 
 const ProductSchema = new Schema({
+    tenantId: { type: Schema.Types.ObjectId, ref: 'Tenant', required: true, index: true },
     name: { type: String, required: true },
-    description: { type: String, default: '' }, // <--- CAMPO ADICIONADO AQUI
-    sku: { type: String, unique: true, sparse: true },
+    description: { type: String, default: '' },
+    sku: { type: String, sparse: true },
     price: { type: Number, required: true },
     cost: { type: Number, required: true },
     stock: { type: Number, default: 0 },
@@ -13,5 +15,8 @@ const ProductSchema = new Schema({
         price: { type: Number, required: true }
     }]
 }, { timestamps: true });
+
+// Garante que o SKU seja único por tenant (permite SKUs iguais entre empresas diferentes, mas não dentro da mesma)
+ProductSchema.index({ sku: 1, tenantId: 1 }, { unique: true, sparse: true });
 
 export default models.Product || model('Product', ProductSchema);

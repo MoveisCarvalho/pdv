@@ -20,7 +20,7 @@ export async function DELETE(
         }
 
         const { id } = await context.params;
-        const filter = token.role === 'super_admin' ? { _id: id } : { _id: id, tenantId: token.tenantId };
+        const filter = token.role === 'super_admin' && !token.tenantId ? { _id: id } : { _id: id, tenantId: token.tenantId };
         const deleted = await Table.findOneAndDelete(filter);
 
         if (!deleted) {

@@ -16,7 +16,7 @@ export async function GET(request: NextRequest) {
             return NextResponse.json({ success: false, error: 'Sem permissão' }, { status: 403 });
         }
 
-        const filter = token.role === 'super_admin' ? {} : { tenantId: token.tenantId };
+        const filter = token.role === 'super_admin' && !token.tenantId ? {} : { tenantId: token.tenantId };
         const tables = await Table.find(filter).sort({ name: 1 });
         return NextResponse.json({ success: true, data: tables }, { status: 200 });
     } catch (error: any) {
@@ -35,17 +35,33 @@ export async function POST(request: NextRequest) {
             return NextResponse.json({ success: false, error: 'Sem permissão' }, { status: 403 });
         }
 
-        const { name } = await request.json();
-        if (!name) return NextResponse.json({ success: false, error: 'Nome obrigatório' }, { status: 400 });
+        const body = await request.json();
+        const name = body.name ? body.name.trim() : '';
+        if (!name) {
+            return NextResponse.json({ success: false, error: 'Nome obrigatório' }, { status: 400 });
+        }
 
-        const filter = token.role === 'super_admin' ? { name: name.trim() } : { name: name.trim(), tenantId: token.tenantId };
+        const tenantId = body.tenantId || token.tenantId;
+        if (!tenantId) {
+            return NextResponse.json(
+                { success: false, error: 'Nenhum estabelecimento (Tenant) associado para realizar o cadastro.' },
+                { status: 400 }
+            );
+        }
+
+        const filter = { name, tenantId };
         let table = await Table.findOne(filter);
         if (!table) {
-            const data = token.role === 'super_admin' ? { name: name.trim() } : { name: name.trim(), tenantId: token.tenantId };
-            table = await Table.create(data);
+            table = await Table.create({ name, tenantId });
         }
         return NextResponse.json({ success: true, data: table }, { status: 201 });
     } catch (error: any) {
+        if (error.code === 11000) {
+            return NextResponse.json(
+                { success: false, error: 'Já existe uma mesa cadastrada com este nome neste estabelecimento.' },
+                { status: 400 }
+            );
+        }
         return NextResponse.json({ success: false, error: error.message }, { status: 400 });
     }
 }

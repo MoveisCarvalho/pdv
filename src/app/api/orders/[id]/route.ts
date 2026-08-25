@@ -1,7 +1,7 @@
-// src/app/api/orders/[id]/route.ts
 import dbConnect from '@/src/lib/mongodb';
 import Order from '@/src/models/Order';
 import Product from '@/src/models/Product';
+import User from '@/src/models/User';
 import { NextRequest, NextResponse } from 'next/server';
 import { getToken } from 'next-auth/jwt';
 import { hasPermission } from '@/src/lib/permissions';
@@ -20,17 +20,29 @@ export async function PATCH(
             return NextResponse.json({ success: false, error: 'Sem permissão' }, { status: 403 });
         }
 
+        // Garante o tenantId via token ou busca direta no User model se o token estiver incompleto
+        let tenantId = token.tenantId;
+        if (!tenantId && token.role !== 'super_admin') {
+            const userId = token.sub || (token as any).id;
+            if (userId) {
+                const dbUser = await User.findById(userId);
+                if (dbUser && dbUser.tenantId) {
+                    tenantId = dbUser.tenantId;
+                }
+            }
+        }
+
         const resolvedParams = await Promise.resolve(params);
         const id = resolvedParams.id;
 
-        // Primeiro, busca o pedido para verificar se pertence ao tenant
-        const filter = token.role === 'super_admin' ? { _id: id } : { _id: id, tenantId: token.tenantId };
+        // Primeiro, busca o pedido para verificar se pertence ao tenant correto
+        const filter = token.role === 'super_admin' ? { _id: id } : { _id: id, tenantId };
         const existingOrder = await Order.findOne(filter);
         if (!existingOrder) {
             return NextResponse.json({ success: false, error: 'Comanda não encontrada ou não pertence ao seu tenant' }, { status: 404 });
         }
 
-        // A partir daqui, todas as operações usam existingOrder (que já está no tenant correto)
+        // A partir daqui, todas as operações usam existingOrder
         const body = await request.json();
         const { status, cancellationReason, cancelledBy, paymentMethod, total, items, newItems, itemId, itemStatus, customerName } = body;
 
@@ -58,7 +70,7 @@ export async function PATCH(
         }
 
         // Demais atualizações
-        const order = existingOrder; // já é o documento
+        const order = existingOrder;
 
         if (status === 'cancelado' && order.status !== 'cancelado') {
             for (const item of order.items) {

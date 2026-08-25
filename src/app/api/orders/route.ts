@@ -1,6 +1,6 @@
-// src/app/api/orders/route.ts
 import dbConnect from '@/src/lib/mongodb';
 import Order from '@/src/models/Order';
+import User from '@/src/models/User';
 import { NextRequest, NextResponse } from 'next/server';
 import { getToken } from 'next-auth/jwt';
 import { hasPermission } from '@/src/lib/permissions';
@@ -16,7 +16,19 @@ export async function GET(request: NextRequest) {
             return NextResponse.json({ success: false, error: 'Sem permissão' }, { status: 403 });
         }
 
-        const filter = token.role === 'super_admin' ? {} : { tenantId: token.tenantId };
+        // Garante o tenantId via token ou busca direta no User model se o token estiver incompleto
+        let tenantId = token.tenantId;
+        if (!tenantId && token.role !== 'super_admin') {
+            const userId = token.sub || (token as any).id;
+            if (userId) {
+                const dbUser = await User.findById(userId);
+                if (dbUser && dbUser.tenantId) {
+                    tenantId = dbUser.tenantId;
+                }
+            }
+        }
+
+        const filter = token.role === 'super_admin' ? {} : { tenantId };
         const orders = await Order.find(filter)
             .populate({ path: 'waiterId', select: 'name commissionRate', strictPopulate: false })
             .populate({ path: 'customerId', select: 'name phone', strictPopulate: false });
@@ -37,10 +49,24 @@ export async function POST(request: NextRequest) {
             return NextResponse.json({ success: false, error: 'Sem permissão' }, { status: 403 });
         }
 
+        // Garante o tenantId via token ou busca direta no User model se o token estiver incompleto
+        let tenantId = token.tenantId;
+        if (!tenantId && token.role !== 'super_admin') {
+            const userId = token.sub || (token as any).id;
+            if (userId) {
+                const dbUser = await User.findById(userId);
+                if (dbUser && dbUser.tenantId) {
+                    tenantId = dbUser.tenantId;
+                }
+            }
+        }
+
         const body = await request.json();
         const { table, customerName, items, total, paymentMethod, status } = body;
 
-        // Validação de mesa (já existente)
+        const targetTenantId = token.role === 'super_admin' ? (body.tenantId || tenantId) : tenantId;
+
+        // Validação de mesa
         if (table) {
             const normalizedTable = table.toLowerCase().trim();
             const isBalcaoOrDelivery =
@@ -50,8 +76,15 @@ export async function POST(request: NextRequest) {
                 normalizedTable.includes('delivery');
 
             if (!isBalcaoOrDelivery) {
-                const filter = token.role === 'super_admin' ? { table, status: { $nin: ['pago', 'cancelado'] } }
-                    : { table, status: { $nin: ['pago', 'cancelado'] }, tenantId: token.tenantId };
+                const filter: any = {
+                    table,
+                    status: { $nin: ['pago', 'cancelado'] }
+                };
+
+                if (targetTenantId) {
+                    filter.tenantId = targetTenantId;
+                }
+
                 const existingOpenOrder = await Order.findOne(filter);
                 if (existingOpenOrder) {
                     return NextResponse.json(
@@ -86,11 +119,20 @@ export async function POST(request: NextRequest) {
             status: status || 'aberto',
         };
 
-        // Adiciona tenantId (a menos que super_admin)
-        if (token.role !== 'super_admin') {
-            orderData.tenantId = token.tenantId;
-        } else if (body.tenantId) {
-            orderData.tenantId = body.tenantId;
+        // Atribuição estrita do tenantId
+        if (token.role === 'super_admin') {
+            if (body.tenantId) {
+                orderData.tenantId = body.tenantId;
+            }
+        } else {
+            if (targetTenantId) {
+                orderData.tenantId = targetTenantId;
+            } else {
+                return NextResponse.json(
+                    { success: false, error: 'Tenant ID não identificado para o usuário.' },
+                    { status: 400 }
+                );
+            }
         }
 
         const order = await Order.create(orderData);

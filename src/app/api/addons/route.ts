@@ -1,12 +1,12 @@
 // src/app/api/addons/route.ts
 import { NextResponse } from 'next/server';
-import type { NextRequest } from 'next/server'; // <-- importe o tipo
+import type { NextRequest } from 'next/server';
 import dbConnect from '@/src/lib/mongodb';
 import Addon from '@/src/models/Addon';
 import { getToken } from 'next-auth/jwt';
 import { hasPermission } from '@/src/lib/permissions';
 
-export async function GET(request: NextRequest) { // <-- NextRequest
+export async function GET(request: NextRequest) {
     try {
         await dbConnect();
         const token = await getToken({ req: request, secret: process.env.NEXTAUTH_SECRET });
@@ -20,13 +20,14 @@ export async function GET(request: NextRequest) { // <-- NextRequest
 
         const filter = token.role === 'super_admin' ? {} : { tenantId: token.tenantId };
         const addons = await Addon.find(filter).sort({ name: 1 });
+
         return NextResponse.json({ success: true, data: addons });
     } catch (error: any) {
         return NextResponse.json({ success: false, error: error.message }, { status: 400 });
     }
 }
 
-export async function POST(request: NextRequest) { // <-- NextRequest
+export async function POST(request: NextRequest) {
     try {
         await dbConnect();
         const token = await getToken({ req: request, secret: process.env.NEXTAUTH_SECRET });
@@ -38,10 +39,26 @@ export async function POST(request: NextRequest) { // <-- NextRequest
         }
 
         const body = await request.json();
-        const data = token.role === 'super_admin' ? body : { ...body, tenantId: token.tenantId };
+        const tenantId = body.tenantId || token.tenantId;
+
+        if (!tenantId) {
+            return NextResponse.json(
+                { success: false, error: 'Nenhum estabelecimento (Tenant) associado para realizar o cadastro.' },
+                { status: 400 }
+            );
+        }
+
+        const data = { ...body, tenantId };
+
         const addon = await Addon.create(data);
         return NextResponse.json({ success: true, data: addon }, { status: 201 });
     } catch (error: any) {
+        if (error.code === 11000) {
+            return NextResponse.json(
+                { success: false, error: 'Já existe um acréscimo cadastrado com este nome neste estabelecimento.' },
+                { status: 400 }
+            );
+        }
         return NextResponse.json({ success: false, error: error.message }, { status: 400 });
     }
 }
