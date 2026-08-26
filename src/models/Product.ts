@@ -1,4 +1,3 @@
-// src/models/Product.ts
 import mongoose, { Schema, models, model } from 'mongoose';
 
 const ProductSchema = new Schema({
@@ -10,6 +9,10 @@ const ProductSchema = new Schema({
     cost: { type: Number, required: true },
     stock: { type: Number, default: 0 },
     category: { type: String },
+    images: {
+        type: [String],
+        validate: [(val: string[]) => val.length <= 4, 'O produto pode ter no máximo 4 imagens.']
+    },
     addons: [{
         name: { type: String, required: true },
         price: { type: Number, required: true }

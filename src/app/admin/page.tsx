@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useEffect, useRef } from 'react';
-import { Package, Plus, Trash2, Edit, ArrowLeft, Layers, Utensils, X, Tag, Loader2 } from 'lucide-react'; // <-- ADICIONADO Loader2
+import { Package, Plus, Trash2, Edit, ArrowLeft, Layers, Utensils, X, Tag, Loader2, Image as ImageIcon } from 'lucide-react';
 import Link from 'next/link';
 import Tooltip from '@/src/components/Tooltip';
 import ThemeToggle from '@/src/components/ThemeToggle';
@@ -14,6 +14,7 @@ interface Product {
     cost: number;
     stock: number;
     category: string;
+    images?: string[];
 }
 
 interface Category {
@@ -45,7 +46,11 @@ export default function AdminPage() {
     const [price, setPrice] = useState('');
     const [cost, setCost] = useState('');
     const [stock, setStock] = useState('');
+    const [images, setImages] = useState<string[]>([]);
     const [editingId, setEditingId] = useState<string | null>(null);
+
+    // Ref para o input de arquivo oculto
+    const fileInputRef = useRef<HTMLInputElement>(null);
 
     // Category Autocomplete states
     const [categoryInput, setCategoryInput] = useState('');
@@ -199,6 +204,68 @@ export default function AdminPage() {
         }
     };
 
+    // --- Funções de manipulação e compactação de imagens (Base64) ---
+    const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+        const files = e.target.files;
+        if (!files || files.length === 0) return;
+
+        if (images.length >= 4) {
+            alert('O limite máximo é de 4 imagens por produto.');
+            return;
+        }
+
+        const availableSlots = 4 - images.length;
+        const filesToProcess = Array.from(files).slice(0, availableSlots);
+
+        filesToProcess.forEach(file => {
+            const reader = new FileReader();
+            reader.onload = (uploadEvent) => {
+                const img = new window.Image();
+                img.onload = () => {
+                    const canvas = document.createElement('canvas');
+                    let width = img.width;
+                    let height = img.height;
+
+                    // Redimensiona mantendo a proporção (Máximo de 800px para poupar espaço no Banco/Vercel)
+                    const MAX_SIZE = 800;
+                    if (width > height) {
+                        if (width > MAX_SIZE) {
+                            height *= MAX_SIZE / width;
+                            width = MAX_SIZE;
+                        }
+                    } else {
+                        if (height > MAX_SIZE) {
+                            width *= MAX_SIZE / height;
+                            height = MAX_SIZE;
+                        }
+                    }
+
+                    canvas.width = width;
+                    canvas.height = height;
+                    const ctx = canvas.getContext('2d');
+                    if (ctx) {
+                        ctx.drawImage(img, 0, 0, width, height);
+                        // Compacta em JPEG com qualidade 0.7
+                        const compressedBase64 = canvas.toDataURL('image/jpeg', 0.7);
+                        setImages(prev => {
+                            if (prev.length >= 4) return prev;
+                            return [...prev, compressedBase64];
+                        });
+                    }
+                };
+                img.src = uploadEvent.target?.result as string;
+            };
+            reader.readAsDataURL(file);
+        });
+
+        // Limpa o input file para permitir selecionar o mesmo arquivo novamente se necessário
+        e.target.value = '';
+    };
+
+    const handleRemoveImage = (index: number) => {
+        setImages(images.filter((_, i) => i !== index));
+    };
+
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
         let finalCategory = categoryInput.trim() || 'Geral';
@@ -221,6 +288,7 @@ export default function AdminPage() {
             cost: parseFloat(cost || '0'),
             stock: parseInt(stock || '0'),
             category: finalCategory,
+            images,
         };
 
         try {
@@ -253,6 +321,7 @@ export default function AdminPage() {
         setCost(prod.cost.toString());
         setStock(prod.stock.toString());
         setCategoryInput(prod.category || '');
+        setImages(prod.images || []);
         scrollToForm();
     };
 
@@ -306,6 +375,8 @@ export default function AdminPage() {
         setCost('');
         setStock('');
         setCategoryInput('');
+        setImages([]);
+        if (fileInputRef.current) fileInputRef.current.value = '';
     };
 
     const filteredCategories = categories.filter(c =>
@@ -367,6 +438,52 @@ export default function AdminPage() {
                                     rows={3}
                                     className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:border-indigo-500 resize-none"
                                 />
+                            </div>
+
+                            {/* Seção de Seleção e Gerenciamento de Imagens por Clique (Até 4) */}
+                            <div>
+                                <label className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1 flex items-center justify-between">
+                                    <span>Imagens do Produto ({images.length}/4)</span>
+                                    {images.length < 4 && <span className="text-[10px] text-indigo-500 font-normal">Máx. 4 imagens</span>}
+                                </label>
+
+                                <input
+                                    type="file"
+                                    ref={fileInputRef}
+                                    onChange={handleImageUpload}
+                                    accept="image/*"
+                                    multiple
+                                    className="hidden"
+                                />
+
+                                {images.length < 4 && (
+                                    <button
+                                        type="button"
+                                        onClick={() => fileInputRef.current?.click()}
+                                        className="w-full border-2 border-dashed border-slate-300 dark:border-slate-700 hover:border-indigo-500 dark:hover:border-indigo-500 bg-slate-50 dark:bg-slate-950 rounded-xl p-3 text-xs text-slate-600 dark:text-slate-400 flex items-center justify-center gap-2 transition-colors mb-2 cursor-pointer"
+                                    >
+                                        <ImageIcon size={16} className="text-indigo-500" />
+                                        <span>Clique para escolher imagens ({4 - images.length} restante{4 - images.length > 1 ? 's' : ''})</span>
+                                    </button>
+                                )}
+
+                                {images.length > 0 && (
+                                    <div className="grid grid-cols-4 gap-2 mt-2">
+                                        {images.map((imgUrl, index) => (
+                                            <div key={index} className="relative group bg-slate-100 dark:bg-slate-800 rounded-lg overflow-hidden h-16 border border-slate-200 dark:border-slate-700">
+                                                <img src={imgUrl} alt={`Preview ${index + 1}`} className="w-full h-full object-cover" />
+                                                <button
+                                                    type="button"
+                                                    onClick={() => handleRemoveImage(index)}
+                                                    className="absolute inset-0 bg-slate-950/60 opacity-0 group-hover:opacity-100 flex items-center justify-center text-white transition-opacity cursor-pointer"
+                                                    title="Remover imagem"
+                                                >
+                                                    <Trash2 size={14} />
+                                                </button>
+                                            </div>
+                                        ))}
+                                    </div>
+                                )}
                             </div>
 
                             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -441,7 +558,7 @@ export default function AdminPage() {
                                         type="button"
                                         onClick={resetForm}
                                         disabled={isProcessing}
-                                        className="flex-1 bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-300 py-3 rounded-xl font-bold text-sm transition-colors disabled:opacity-50"
+                                        className="flex-1 bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-300 py-3 rounded-xl font-bold text-sm transition-colors disabled:opacity-50 cursor-pointer"
                                     >
                                         Cancelar
                                     </button>
@@ -449,7 +566,7 @@ export default function AdminPage() {
                                 <button
                                     type="submit"
                                     disabled={isProcessing}
-                                    className="flex-1 bg-indigo-600 hover:bg-indigo-700 text-white py-3 rounded-xl font-bold text-sm transition-colors shadow-lg shadow-indigo-600/20 flex items-center justify-center gap-2 disabled:opacity-70"
+                                    className="flex-1 bg-indigo-600 hover:bg-indigo-700 text-white py-3 rounded-xl font-bold text-sm transition-colors shadow-lg shadow-indigo-600/20 flex items-center justify-center gap-2 disabled:opacity-70 cursor-pointer"
                                 >
                                     {isProcessing ? (
                                         <><Loader2 className="animate-spin h-4 w-4" /> {editingId ? 'Salvando...' : 'Cadastrando...'}</>
@@ -478,7 +595,7 @@ export default function AdminPage() {
                             <button
                                 type="submit"
                                 disabled={isProcessing}
-                                className="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-xl text-xs font-bold whitespace-nowrap flex items-center justify-center gap-2 disabled:opacity-70"
+                                className="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-xl text-xs font-bold whitespace-nowrap flex items-center justify-center gap-2 disabled:opacity-70 cursor-pointer"
                             >
                                 {isProcessing ? <Loader2 className="animate-spin h-3 w-3" /> : 'Adicionar'}
                             </button>
@@ -491,7 +608,7 @@ export default function AdminPage() {
                                         type="button"
                                         onClick={() => handleDeleteTable(t._id)}
                                         disabled={isProcessing}
-                                        className="text-slate-400 hover:text-red-500 transition-colors ml-1 disabled:opacity-50 disabled:cursor-not-allowed"
+                                        className="text-slate-400 hover:text-red-500 transition-colors ml-1 disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
                                         title="Excluir mesa"
                                     >
                                         <Trash2 size={12} />
@@ -514,7 +631,7 @@ export default function AdminPage() {
                                         type="button"
                                         onClick={() => handleDeleteCategory(cat._id)}
                                         disabled={isProcessing}
-                                        className="text-slate-400 hover:text-red-500 transition-colors ml-1 disabled:opacity-50 disabled:cursor-not-allowed"
+                                        className="text-slate-400 hover:text-red-500 transition-colors ml-1 disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
                                         title="Excluir categoria"
                                     >
                                         <Trash2 size={12} />
@@ -551,7 +668,7 @@ export default function AdminPage() {
                                 type="button"
                                 onClick={handleAddAddon}
                                 disabled={isProcessing}
-                                className="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-xl text-xs font-bold whitespace-nowrap flex items-center justify-center gap-2 disabled:opacity-70"
+                                className="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-xl text-xs font-bold whitespace-nowrap flex items-center justify-center gap-2 disabled:opacity-70 cursor-pointer"
                             >
                                 {isProcessing ? <Loader2 className="animate-spin h-3 w-3" /> : 'Adicionar'}
                             </button>
@@ -564,7 +681,7 @@ export default function AdminPage() {
                                         type="button"
                                         onClick={() => handleDeleteAddon(a._id)}
                                         disabled={isProcessing}
-                                        className="text-slate-400 hover:text-red-500 transition-colors ml-1 disabled:opacity-50 disabled:cursor-not-allowed"
+                                        className="text-slate-400 hover:text-red-500 transition-colors ml-1 disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
                                         title="Excluir acréscimo"
                                     >
                                         <Trash2 size={12} />
@@ -588,8 +705,19 @@ export default function AdminPage() {
                     ) : (
                         <div className="grid grid-cols-1 gap-3 overflow-y-auto max-h-[calc(100vh-220px)] pr-1">
                             {products.map((prod) => (
-                                <div key={prod._id} className="bg-white dark:bg-slate-900 p-4 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2">
-                                    <div className="w-full sm:w-auto">
+                                <div key={prod._id} className="bg-white dark:bg-slate-900 p-4 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
+                                    {/* Miniatura da Imagem na Lista se houver */}
+                                    {prod.images && prod.images.length > 0 ? (
+                                        <div className="w-16 h-16 rounded-xl bg-slate-100 dark:bg-slate-800 overflow-hidden shrink-0 border border-slate-200 dark:border-slate-700">
+                                            <img src={prod.images[0]} alt={prod.name} className="w-full h-full object-cover" />
+                                        </div>
+                                    ) : (
+                                        <div className="w-16 h-16 rounded-xl bg-slate-100 dark:bg-slate-800 flex items-center justify-center text-slate-400 shrink-0 border border-slate-200 dark:border-slate-700">
+                                            <ImageIcon size={20} />
+                                        </div>
+                                    )}
+
+                                    <div className="w-full sm:flex-1">
                                         <div className="flex items-center gap-2 mb-1 flex-wrap">
                                             <h3 className="font-bold text-slate-800 dark:text-slate-100 text-base">{prod.name}</h3>
                                         </div>
@@ -613,6 +741,7 @@ export default function AdminPage() {
                                         <div className="flex items-start gap-2 flex-wrap mt-1">
                                             <p className="text-xs text-slate-400">
                                                 Preço: <span className="font-semibold text-indigo-600 dark:text-indigo-400">R$ {prod.price.toFixed(2)}</span> • Custo: R$ {(prod.cost || 0).toFixed(2)} • Estoque: {prod.stock || 0} un.
+                                                {prod.images && prod.images.length > 0 && ` • ${prod.images.length} img(s)`}
                                             </p>
                                         </div>
                                     </div>
@@ -620,7 +749,7 @@ export default function AdminPage() {
                                         <button
                                             onClick={() => handleEdit(prod)}
                                             disabled={isProcessing}
-                                            className="p-2 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-300 rounded-xl transition-colors disabled:opacity-50"
+                                            className="p-2 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-300 rounded-xl transition-colors disabled:opacity-50 cursor-pointer"
                                             title="Editar"
                                         >
                                             <Edit size={16} />
@@ -628,7 +757,7 @@ export default function AdminPage() {
                                         <button
                                             onClick={() => handleDeleteProduct(prod._id)}
                                             disabled={isProcessing}
-                                            className="p-2 bg-red-50 dark:bg-red-950/50 hover:bg-red-100 dark:hover:bg-red-900 text-red-600 dark:text-red-400 rounded-xl transition-colors disabled:opacity-50"
+                                            className="p-2 bg-red-50 dark:bg-red-950/50 hover:bg-red-100 dark:hover:bg-red-900 text-red-600 dark:text-red-400 rounded-xl transition-colors disabled:opacity-50 cursor-pointer"
                                             title="Excluir"
                                         >
                                             <Trash2 size={16} />

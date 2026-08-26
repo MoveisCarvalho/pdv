@@ -9,10 +9,11 @@ export interface Addon {
 export interface Product {
     _id: string;
     name: string;
-    description?: string; // <-- NOVO CAMPO OPCIONAL
+    description?: string;
     price: number;
     stock: number;
     category: string;
+    images?: string[]; // Adicionado suporte a até 4 imagens
 }
 
 export interface CartItem extends Product {

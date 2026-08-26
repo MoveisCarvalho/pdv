@@ -311,6 +311,22 @@ export default function ProductCatalog({
                                             className="bg-slate-50 dark:bg-slate-950 p-2.5 rounded-xl border border-slate-200 dark:border-slate-800 hover:border-indigo-500 transition-all text-left flex flex-col justify-between group shadow-2xs hover:shadow-md"
                                         >
                                             <div>
+                                                {/* Exibição da Imagem do Produto (Até 4 imagens suportadas) */}
+                                                {prod.images && prod.images.length > 0 && (
+                                                    <div className="mb-2 w-full h-24 bg-slate-200 dark:bg-slate-800 rounded-lg overflow-hidden relative">
+                                                        <img
+                                                            src={prod.images[0]}
+                                                            alt={prod.name}
+                                                            className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                                                        />
+                                                        {prod.images.length > 1 && (
+                                                            <span className="absolute bottom-1 right-1 bg-slate-900/70 text-white text-[9px] px-1.5 py-0.5 rounded-md backdrop-blur-xs">
+                                                                +{prod.images.length - 1}
+                                                            </span>
+                                                        )}
+                                                    </div>
+                                                )}
+
                                                 <h3 className="font-semibold text-slate-800 dark:text-slate-100 group-hover:text-indigo-600 text-xs line-clamp-2">
                                                     {prod.name}
                                                 </h3>
