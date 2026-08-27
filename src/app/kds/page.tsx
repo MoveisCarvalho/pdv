@@ -15,6 +15,7 @@ import {
     X,
     Volume2,
     VolumeX,
+    Building2,
 } from 'lucide-react';
 import Tooltip from '@/src/components/Tooltip';
 import ThemeToggle from '@/src/components/ThemeToggle';
@@ -38,6 +39,7 @@ interface Order {
     paymentMethod: string;
     status: 'aberto' | 'preparando' | 'concluido' | 'pago' | 'cancelado';
     createdAt: string;
+    tenantId?: string | { _id: string; name: string };
 }
 
 type DateFilterType = 'last18h' | 'today' | 'yesterday' | 'all' | 'specific';
@@ -48,58 +50,55 @@ export default function KDSPage() {
     const [filterStatus, setFilterStatus] = useState<'ativos' | 'todos' | 'finalizados'>('ativos');
     const [dateFilter, setDateFilter] = useState<DateFilterType>('last18h');
     const [specificDate, setSpecificDate] = useState<string>('');
+    const [selectedTenant, setSelectedTenant] = useState<string>('all');
     const [isMuted, setIsMuted] = useState(false);
 
     // --- Timer e Referências ---
     const timerRef = useRef<NodeJS.Timeout | null>(null);
-    const prevOrdersRef = useRef<Order[]>([]);
     const audioCtxRef = useRef<AudioContext | null>(null);
-    const ordersRef = useRef<Order[]>([]);
     const isMutedRef = useRef(isMuted);
+    const selectedTenantRef = useRef(selectedTenant);
 
-    // Sincroniza a Ref com o estado para os callbacks
+    // Sincroniza as Refs com os estados para os callbacks e intervalos
     useEffect(() => {
         isMutedRef.current = isMuted;
     }, [isMuted]);
 
+    useEffect(() => {
+        selectedTenantRef.current = selectedTenant;
+    }, [selectedTenant]);
+
     const resetAutoClearTimer = () => {
-        // Se já existir um timer rodando, cancela ele
         if (timerRef.current) {
             clearTimeout(timerRef.current);
         }
-
-        // Inicia um novo timer de 1 minuto (60000ms)
         timerRef.current = setTimeout(() => {
             console.log('Tempo esgotado, limpando filtros...');
             handleClearFilters();
-        }, 60000); // 60 segundos
+        }, 60000);
     };
 
     // --- Funções de Sinal Sonoro (Web Audio API) ---
     const playAlertSound = (beepCount: number, duration: number, gap: number) => {
-        // Se estiver mudo, não toca nada
         if (typeof window === 'undefined' || isMutedRef.current) return;
 
         try {
-            // Garante que o contexto de áudio exista
             if (!audioCtxRef.current || audioCtxRef.current.state === 'closed') {
                 audioCtxRef.current = new (window.AudioContext || (window as any).webkitAudioContext)();
             }
             const ctx = audioCtxRef.current;
 
-            // Se ainda estiver suspenso (bloqueado pelo navegador), tenta resumir de forma segura.
             if (ctx.state === 'suspended') {
                 ctx.resume().catch(() => { });
             }
 
-            // Executa os bipes
             for (let i = 0; i < beepCount; i++) {
                 const startTime = ctx.currentTime + i * (duration / 1000 + gap / 1000);
                 const oscillator = ctx.createOscillator();
                 const gainNode = ctx.createGain();
 
                 oscillator.type = 'sine';
-                oscillator.frequency.value = 880; // Tom A5 (agudo)
+                oscillator.frequency.value = 880;
                 gainNode.gain.setValueAtTime(0.3, startTime);
                 gainNode.gain.exponentialRampToValueAtTime(0.01, startTime + duration / 1000);
 
@@ -109,34 +108,28 @@ export default function KDSPage() {
                 oscillator.stop(startTime + duration / 1000);
             }
         } catch (err) {
-            // Ignora silenciosamente se o áudio ainda não foi desbloqueado pelo clique do usuário
+            // Ignora silenciosamente
         }
     };
 
     const playNewOrderSound = () => {
-        playAlertSound(2, 150, 200); // 2 bipes rápidos para novo pedido
+        playAlertSound(2, 150, 200);
     };
 
     const playReminderSound = () => {
-        // Se estiver mudo, não toca o bip e nem fala
         if (isMutedRef.current) return;
 
-        // 1. Toca o bip
-        playAlertSound(1, 400, 0); // 1 bipe longo
+        playAlertSound(1, 400, 0);
 
-        // 2. Após o bip, fala a frase com a voz do navegador
         setTimeout(() => {
             if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
                 try {
-                    // Cancela qualquer fala anterior para não sobrepor
                     window.speechSynthesis.cancel();
-
                     const utterance = new SpeechSynthesisUtterance('PEDIDOS PENDENTES');
-                    utterance.lang = 'pt-BR'; // Define o português do Brasil
-                    utterance.rate = 0.9; // Um pouco mais lento
-                    utterance.pitch = 1;  // Tom normal
+                    utterance.lang = 'pt-BR';
+                    utterance.rate = 0.9;
+                    utterance.pitch = 1;
 
-                    // Força o Chrome a usar uma voz em português real
                     const voices = window.speechSynthesis.getVoices();
                     const ptVoice = voices.find(v => v.lang === 'pt-BR');
                     if (ptVoice) {
@@ -171,31 +164,51 @@ export default function KDSPage() {
         return () => clearInterval(interval);
     }, []);
 
-    // Efeito para resetar o timer sempre que os filtros mudarem
     useEffect(() => {
         resetAutoClearTimer();
-
-        // Função de limpeza para quando o componente sair da tela
         return () => {
             if (timerRef.current) {
                 clearTimeout(timerRef.current);
             }
         };
-    }, [filterStatus, dateFilter, specificDate]);
+    }, [filterStatus, dateFilter, specificDate, selectedTenant]);
 
-    // --- Sincroniza a Ref com o estado Orders para o lembrete ---
-    useEffect(() => {
-        ordersRef.current = orders;
+    // Extrai lista única de tenants para o filtro com nome amigável
+    const availableTenants = useMemo(() => {
+        const tenantsMap = new Map<string, string>();
+        orders.forEach(order => {
+            if (order.tenantId) {
+                const id = typeof order.tenantId === 'object' ? order.tenantId._id : order.tenantId;
+                const name = typeof order.tenantId === 'object' && order.tenantId.name
+                    ? order.tenantId.name
+                    : `Empresa ${String(id).slice(-4)}`;
+                tenantsMap.set(String(id), name);
+            }
+        });
+        return Array.from(tenantsMap.entries()).map(([id, name]) => ({ id, name }));
     }, [orders]);
 
-    // --- Inicialização e Desbloqueio do Áudio e da Voz (Chrome Hack) ---
+    const getTenantIdString = (tenantField: Order['tenantId']): string => {
+        if (!tenantField) return '';
+        return typeof tenantField === 'object' ? tenantField._id : tenantField;
+    };
+
+    const getTenantName = (tenantField: Order['tenantId']): string => {
+        if (!tenantField) return '';
+        if (typeof tenantField === 'object' && tenantField.name) {
+            return tenantField.name;
+        }
+        const idStr = String(tenantField);
+        const found = availableTenants.find(t => t.id === idStr);
+        return found ? found.name : `Empresa ${idStr.slice(-4)}`;
+    };
+
+    // Inicialização do Áudio
     useEffect(() => {
         if (typeof window !== 'undefined') {
-            // 1. Cria o contexto de áudio
             const ctx = new (window.AudioContext || (window as any).webkitAudioContext)();
             audioCtxRef.current = ctx;
 
-            // 2. Carrega as vozes do Chrome
             const loadVoices = () => {
                 window.speechSynthesis.getVoices();
             };
@@ -204,30 +217,25 @@ export default function KDSPage() {
                 loadVoices();
             }
 
-            // 3. Função que desbloqueia o áudio e o TTS no primeiro clique
             const unlockAudio = () => {
                 if (audioCtxRef.current && audioCtxRef.current.state === 'suspended') {
                     audioCtxRef.current.resume().then(() => {
-                        console.log('🔊 Áudio desbloqueado permanentemente!');
+                        console.log('🔊 Áudio desbloqueado!');
                     });
                 }
-
-                // Truque para desbloquear a VOZ no Chrome
                 if (window.speechSynthesis) {
                     try {
                         const dummyUtterance = new SpeechSynthesisUtterance(' ');
-                        dummyUtterance.volume = 0; // Volume zero, fala silenciosamente
+                        dummyUtterance.volume = 0;
                         window.speechSynthesis.speak(dummyUtterance);
-                        window.speechSynthesis.cancel(); // Para imediatamente
-                    } catch (e) { /* Ignora */ }
+                        window.speechSynthesis.cancel();
+                    } catch (e) { }
                 }
             };
 
-            // Escuta qualquer clique ou toque na tela (permanentemente)
             document.addEventListener('click', unlockAudio);
             document.addEventListener('touchstart', unlockAudio);
 
-            // Limpeza ao sair da página
             return () => {
                 document.removeEventListener('click', unlockAudio);
                 document.removeEventListener('touchstart', unlockAudio);
@@ -242,78 +250,6 @@ export default function KDSPage() {
         }
     }, []);
 
-    // --- Efeito para tocar som quando um novo pedido (ou itens novos) chegar ---
-    useEffect(() => {
-        const prevOrders = prevOrdersRef.current;
-        const currentOrders = orders;
-
-        // Verifica se há algum pedido NOVO (status 'aberto') ou se itens foram adicionados a um pedido existente
-        const hasNewItemsOrOrders = currentOrders.some(currentOrder => {
-            if (currentOrder.status !== 'aberto') return false;
-
-            const prevOrder = prevOrders.find(p => p._id === currentOrder._id);
-            if (!prevOrder) return true; // Pedido completamente novo
-
-            // Se o pedido já existia, verifica se o número de itens aumentou
-            return currentOrder.items.length > prevOrder.items.length;
-        });
-
-        if (hasNewItemsOrOrders) {
-            playNewOrderSound();
-        }
-
-        // Atualiza a referência para a próxima comparação
-        prevOrdersRef.current = currentOrders;
-    }, [orders]);
-
-    // --- Efeito para tocar som de lembrete a cada 30 segundos se houver pedidos "aberto" ---
-    useEffect(() => {
-        const reminderInterval = setInterval(() => {
-            // Verifica usando a REF (imutável), para evitar recriar o intervalo infinitamente
-            const hasPendingOrders = ordersRef.current.some(o => o.status === 'aberto');
-
-            if (hasPendingOrders) {
-                playReminderSound();
-            }
-        }, 30000); // 30 segundos
-
-        // Limpa o intervalo quando o componente desmontar
-        return () => clearInterval(reminderInterval);
-    }, []); // Array vazio = executa apenas 1 vez!
-
-    const updateItemStatus = async (orderId: string, itemId: string, itemStatus: string) => {
-        try {
-            const res = await fetch(`/api/orders/${orderId}`, {
-                method: 'PATCH',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ itemId, itemStatus }),
-            });
-            const json = await res.json();
-            if (json.success) {
-                fetchOrders();
-            }
-        } catch (error) {
-            console.error('Erro ao atualizar status do item:', error);
-        }
-    };
-
-    const updateOrderStatus = async (id: string, newStatus: string) => {
-        try {
-            const res = await fetch(`/api/orders/${id}`, {
-                method: 'PATCH',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ status: newStatus }),
-            });
-            const json = await res.json();
-            if (json.success) {
-                fetchOrders();
-            }
-        } catch (error) {
-            console.error('Erro ao atualizar status:', error);
-        }
-    };
-
-    // --- Filtro por data (considerando fuso local) ---
     const filterOrdersByDate = (ordersList: Order[]): Order[] => {
         const nowLocal = new Date();
 
@@ -360,9 +296,16 @@ export default function KDSPage() {
         });
     };
 
-    // Aplicar filtros combinados (status + data)
+    // Aplicar filtros combinados (Tenant + Status + Data)
     const filteredOrders = useMemo(() => {
-        const statusFiltered = orders.filter((order) => {
+        const tenantFiltered = orders.filter((order) => {
+            if (selectedTenant !== 'all') {
+                const orderTenantIdStr = getTenantIdString(order.tenantId);
+                if (orderTenantIdStr !== selectedTenant) {
+                    return false;
+                }
+            }
+
             const allItemsConcluded = order.items.length > 0 && order.items.every(i => i.status === 'concluido');
             const isOrderConcluded = order.status === 'concluido' || allItemsConcluded;
 
@@ -372,13 +315,91 @@ export default function KDSPage() {
             if (filterStatus === 'finalizados') {
                 return isOrderConcluded;
             }
-            return true; // 'todos'
+            return true;
         });
 
-        return filterOrdersByDate(statusFiltered);
-    }, [orders, filterStatus, dateFilter, specificDate]);
+        return filterOrdersByDate(tenantFiltered);
+    }, [orders, filterStatus, dateFilter, specificDate, selectedTenant]);
 
-    // Formatar data/hora para exibição
+    // Referências sincronizadas com os pedidos filtrados reais da tela
+    const filteredOrdersRef = useRef<Order[]>(filteredOrders);
+    const prevFilteredOrdersRef = useRef<Order[]>([]);
+
+    useEffect(() => {
+        filteredOrdersRef.current = filteredOrders;
+    }, [filteredOrders]);
+
+    // --- Efeito para tocar som quando um novo pedido filtrado/visível chegar ---
+    useEffect(() => {
+        const prevFiltered = prevFilteredOrdersRef.current;
+        const currentFiltered = filteredOrders;
+
+        const hasNewItemsOrOrders = currentFiltered.some(currentOrder => {
+            const allItemsConcluded = currentOrder.items.length > 0 && currentOrder.items.every(i => i.status === 'concluido');
+            if (allItemsConcluded || currentOrder.status === 'concluido' || currentOrder.status === 'cancelado') return false;
+
+            const prevOrder = prevFiltered.find(p => p._id === currentOrder._id);
+            if (!prevOrder) return true;
+
+            return currentOrder.items.length > prevOrder.items.length;
+        });
+
+        if (hasNewItemsOrOrders) {
+            playNewOrderSound();
+        }
+
+        prevFilteredOrdersRef.current = currentFiltered;
+    }, [filteredOrders]);
+
+    // --- Efeito para tocar som de lembrete a cada 30s APENAS se houver pedidos pendentes visíveis na tela ---
+    useEffect(() => {
+        const reminderInterval = setInterval(() => {
+            const currentFiltered = filteredOrdersRef.current;
+            const hasVisiblePendingOrders = currentFiltered.some(o => {
+                const allItemsConcluded = o.items.length > 0 && o.items.every(i => i.status === 'concluido');
+                return !allItemsConcluded && o.status !== 'concluido' && o.status !== 'cancelado';
+            });
+
+            if (hasVisiblePendingOrders) {
+                playReminderSound();
+            }
+        }, 30000);
+
+        return () => clearInterval(reminderInterval);
+    }, []);
+
+    const updateItemStatus = async (orderId: string, itemId: string, itemStatus: string) => {
+        try {
+            const res = await fetch(`/api/orders/${orderId}`, {
+                method: 'PATCH',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ itemId, itemStatus }),
+            });
+            const json = await res.json();
+            if (json.success) {
+                fetchOrders();
+            }
+        } catch (error) {
+            console.error('Erro ao atualizar status do item:', error);
+        }
+    };
+
+    const updateOrderStatus = async (id: string, newStatus: string) => {
+        try {
+            const res = await fetch(`/api/orders/${id}`, {
+                method: 'PATCH',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ status: newStatus }),
+            });
+            const json = await res.json();
+            if (json.success) {
+                fetchOrders();
+            }
+        } catch (error) {
+            console.error('Erro ao atualizar status:', error);
+        }
+    };
+
     const formatDateTime = (dateStr: string) => {
         const date = new Date(dateStr);
         return date.toLocaleString('pt-BR', {
@@ -390,22 +411,20 @@ export default function KDSPage() {
         });
     };
 
-    // Handlers para mudança de filtro de data
     const handleDateFilterChange = (newFilter: DateFilterType) => {
         setDateFilter(newFilter);
         if (newFilter !== 'specific') {
-            setSpecificDate(''); // limpa a data específica ao trocar para outro filtro
+            setSpecificDate('');
         }
     };
 
-    // Handler para limpar todos os filtros (volta ao padrão)
     const handleClearFilters = () => {
         setFilterStatus('ativos');
         setDateFilter('last18h');
         setSpecificDate('');
+        setSelectedTenant('all');
     };
 
-    // Toggle Mudo/Ativo
     const toggleMute = () => {
         setIsMuted(prev => !prev);
     };
@@ -422,15 +441,32 @@ export default function KDSPage() {
                             <ChefHat className="text-amber-500 dark:text-amber-400" /> KDS - Painel da Cozinha
                         </h1>
                         <p className="text-slate-500 dark:text-slate-400 text-sm">
-                            Gerenciamento e status de pedidos e itens em tempo real
+                            Gerenciamento e status de pedidos e itens em tempo real por empresa
                         </p>
                     </div>
                 </div>
 
                 <div className="flex flex-wrap items-center gap-3">
+                    {/* Filtro de Tenant / Empresa */}
+                    {availableTenants.length > 1 && (
+                        <div className="flex items-center gap-1.5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-1.5 rounded-xl shadow-sm">
+                            <Building2 size={14} className="text-indigo-600 dark:text-amber-400 ml-1" />
+                            <select
+                                value={selectedTenant}
+                                onChange={(e) => setSelectedTenant(e.target.value)}
+                                className="bg-transparent text-xs font-semibold text-slate-700 dark:text-slate-200 focus:outline-none cursor-pointer pr-2"
+                            >
+                                <option value="all">Todas as Empresas</option>
+                                {availableTenants.map(t => (
+                                    <option key={t.id} value={t.id}>{t.name}</option>
+                                ))}
+                            </select>
+                        </div>
+                    )}
+
                     {/* Filtro de Status */}
                     <div className="flex items-center gap-1.5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-1.5 rounded-xl shadow-sm">
-                        <Filter size={14} className="text-indigo-600 dark:text-amber-400 ml-1" />  {/* cor mais forte no dark */}
+                        <Filter size={14} className="text-indigo-600 dark:text-amber-400 ml-1" />
                         <button
                             onClick={() => setFilterStatus('ativos')}
                             className={`px-3 py-1 rounded-lg text-xs font-semibold transition-colors ${filterStatus === 'ativos'
@@ -462,7 +498,7 @@ export default function KDSPage() {
 
                     {/* Filtro de Data */}
                     <div className="flex items-center gap-2 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-1.5 rounded-xl shadow-sm flex-wrap">
-                        <Calendar size={14} className="text-indigo-600 dark:text-amber-400 ml-1" />  {/* cor mais forte no dark */}
+                        <Calendar size={14} className="text-indigo-600 dark:text-amber-400 ml-1" />
                         <button
                             onClick={() => handleDateFilterChange('last18h')}
                             className={`px-3 py-1 rounded-lg text-xs font-semibold transition-colors ${dateFilter === 'last18h'
@@ -509,9 +545,6 @@ export default function KDSPage() {
                                 }}
                                 className="bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-lg px-2 py-1 text-xs focus:outline-none focus:border-indigo-500 max-w-[140px] text-slate-800 dark:text-slate-200"
                             />
-                            {dateFilter === 'specific' && specificDate && (
-                                <span className="text-[10px] text-indigo-600 dark:text-amber-400 font-medium">✓</span>
-                            )}
                         </div>
                     </div>
 
@@ -528,8 +561,8 @@ export default function KDSPage() {
                         <button
                             onClick={toggleMute}
                             className={`p-2 rounded-xl border transition-colors shadow-sm ${isMuted
-                                    ? 'bg-red-100 dark:bg-red-900/40 border-red-300 dark:border-red-800 text-red-600 dark:text-red-400 hover:bg-red-200 dark:hover:bg-red-900/60'
-                                    : 'bg-slate-200 dark:bg-slate-800 border-slate-300 dark:border-slate-700 text-slate-700 dark:text-slate-300 hover:bg-slate-300 dark:hover:bg-slate-700'
+                                ? 'bg-red-100 dark:bg-red-900/40 border-red-300 dark:border-red-800 text-red-600 dark:text-red-400'
+                                : 'bg-slate-200 dark:bg-slate-800 border-slate-300 dark:border-slate-700 text-slate-700 dark:text-slate-300'
                                 }`}
                         >
                             {isMuted ? <VolumeX size={18} /> : <Volume2 size={18} />}
@@ -554,7 +587,7 @@ export default function KDSPage() {
                 <div className="text-center py-20 bg-white dark:bg-slate-900/50 rounded-2xl border border-dashed border-slate-300 dark:border-slate-700 p-8 shadow-sm">
                     <ChefHat size={48} className="mx-auto text-slate-400 dark:text-slate-600 mb-4" />
                     <p className="text-slate-600 dark:text-slate-400 text-lg mb-1">Nenhum pedido encontrado com os filtros selecionados.</p>
-                    <p className="text-xs text-slate-400 dark:text-slate-500">Tente ajustar os filtros de data ou status.</p>
+                    <p className="text-xs text-slate-400 dark:text-slate-500">Tente ajustar os filtros de empresa, data ou status.</p>
                 </div>
             ) : (
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
@@ -578,23 +611,28 @@ export default function KDSPage() {
                                             <Clock size={14} />
                                             {order.table} • {formatDateTime(order.createdAt)}
                                         </span>
-                                        <span
-                                            className={`text-xs font-semibold px-2.5 py-1 rounded-full uppercase ${isCardCompleted
-                                                ? 'bg-red-100 dark:bg-red-500/20 text-red-800 dark:text-red-400 border border-red-300 dark:border-red-500/30'
-                                                : order.status === 'preparando'
-                                                    ? 'bg-blue-100 dark:bg-blue-500/20 text-blue-800 dark:text-blue-400 border border-blue-300 dark:border-blue-500/30'
-                                                    : 'bg-amber-100 dark:bg-amber-500/20 text-amber-800 dark:text-amber-400 border border-amber-300 dark:border-amber-500/30'
-                                                }`}
-                                        >
-                                            {isCardCompleted ? 'Concluído' : order.status}
-                                        </span>
+                                        <div className="flex items-center gap-1.5">
+                                            {order.tenantId && availableTenants.length > 1 && (
+                                                <span className="text-[10px] font-semibold px-2 py-0.5 rounded bg-indigo-100 dark:bg-indigo-900/40 text-indigo-700 dark:text-indigo-300">
+                                                    {getTenantName(order.tenantId)}
+                                                </span>
+                                            )}
+                                            <span
+                                                className={`text-xs font-semibold px-2.5 py-1 rounded-full uppercase ${isCardCompleted
+                                                    ? 'bg-red-100 dark:bg-red-500/20 text-red-800 dark:text-red-400 border border-red-300 dark:border-red-500/30'
+                                                    : order.status === 'preparando'
+                                                        ? 'bg-blue-100 dark:bg-blue-500/20 text-blue-800 dark:text-blue-400 border border-blue-300 dark:border-blue-500/30'
+                                                        : 'bg-amber-100 dark:bg-amber-500/20 text-amber-800 dark:text-amber-400 border border-amber-300 dark:border-amber-500/30'
+                                                    }`}
+                                            >
+                                                {isCardCompleted ? 'Concluído' : order.status}
+                                            </span>
+                                        </div>
                                     </div>
 
                                     <div className="space-y-2 mb-6">
                                         {order.items.map((item, idx) => {
                                             const isConcluded = item.status === 'concluido';
-                                            const addonsTotal = (item.addons || []).reduce((acc, a) => acc + a.price, 0);
-                                            const unitPrice = (item.price || 0) + addonsTotal;
                                             const hasAddons = item.addons && item.addons.length > 0;
                                             const hasObservation = item.observation && item.observation.trim() !== '';
 
@@ -604,9 +642,6 @@ export default function KDSPage() {
                                                     className={`flex flex-col gap-2 text-sm p-3 rounded-xl border transition-all ${isConcluded
                                                         ? 'border-amber-300 dark:border-amber-900/50 bg-amber-50/40 dark:bg-amber-950/20'
                                                         : 'border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950/50'
-                                                        } ${!isConcluded && (hasAddons || hasObservation)
-                                                            ? 'ring-1 ring-amber-400 dark:ring-amber-600'
-                                                            : ''
                                                         }`}
                                                 >
                                                     <div className="flex justify-between items-center">
@@ -640,7 +675,7 @@ export default function KDSPage() {
                                                             {item.addons!.map((a, i) => (
                                                                 <span
                                                                     key={i}
-                                                                    className="inline-flex items-center gap-1 bg-amber-500 dark:bg-amber-600 text-white font-bold text-[10px] px-2 py-0.5 rounded-full shadow-md animate-pulse"
+                                                                    className="inline-flex items-center gap-1 bg-amber-500 dark:bg-amber-600 text-white font-bold text-[10px] px-2 py-0.5 rounded-full shadow-md"
                                                                 >
                                                                     <Plus size={10} className="text-white" />
                                                                     {a.name}
@@ -652,7 +687,7 @@ export default function KDSPage() {
 
                                                     {hasObservation && (
                                                         <div className="flex items-start gap-2 mt-1 p-2 bg-red-100 dark:bg-red-900/40 border-l-4 border-red-600 dark:border-red-500 rounded-r-lg shadow-sm">
-                                                            <AlertTriangle size={14} className="text-red-600 dark:text-red-400 shrink-0 mt-0.5 animate-pulse" />
+                                                            <AlertTriangle size={14} className="text-red-600 dark:text-red-400 shrink-0 mt-0.5" />
                                                             <span className="text-xs font-bold text-red-800 dark:text-red-200">
                                                                 Obs: {item.observation}
                                                             </span>
@@ -660,12 +695,7 @@ export default function KDSPage() {
                                                     )}
 
                                                     <div className="flex justify-between items-center pt-2 border-t border-slate-100 dark:border-slate-800/60 text-xs">
-                                                        <span
-                                                            className={`font-semibold ${isConcluded
-                                                                ? 'text-amber-600 dark:text-amber-400'
-                                                                : 'text-amber-600 dark:text-amber-400'
-                                                                }`}
-                                                        >
+                                                        <span className="font-semibold text-amber-600 dark:text-amber-400">
                                                             {isConcluded ? 'Pronto' : 'Aguardando Preparo'}
                                                         </span>
                                                         {item._id && (

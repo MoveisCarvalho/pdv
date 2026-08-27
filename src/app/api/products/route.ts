@@ -1,7 +1,7 @@
-// src/app/api/products/route.ts
 import dbConnect from '@/src/lib/mongodb';
 import Product from '@/src/models/Product';
 import Category from '@/src/models/Category';
+import User from '@/src/models/User';
 import { NextRequest, NextResponse } from 'next/server';
 import { getToken } from 'next-auth/jwt';
 import { hasPermission } from '@/src/lib/permissions';
@@ -9,15 +9,33 @@ import { hasPermission } from '@/src/lib/permissions';
 export async function GET(request: NextRequest) {
     try {
         await dbConnect();
-        const token = await getToken({ req: request, secret: process.env.NEXTAUTH_SECRET });
-        if (!token) {
-            return NextResponse.json({ success: false, error: 'Não autorizado' }, { status: 401 });
-        }
-        if (!hasPermission(token.role as string, 'view_products') && token.role !== 'super_admin') {
-            return NextResponse.json({ success: false, error: 'Sem permissão' }, { status: 403 });
+        const { searchParams } = new URL(request.url);
+        const queryTenantId = searchParams.get('tenantId');
+
+        let tenantId = queryTenantId;
+
+        // Se não foi passado via query string, exige autenticação do painel
+        if (!tenantId) {
+            const token = await getToken({ req: request, secret: process.env.NEXTAUTH_SECRET });
+            if (!token) {
+                return NextResponse.json({ success: false, error: 'Não autorizado' }, { status: 401 });
+            }
+            if (!hasPermission(token.role as string, 'view_products') && token.role !== 'super_admin') {
+                return NextResponse.json({ success: false, error: 'Sem permissão' }, { status: 403 });
+            }
+
+            tenantId = token.tenantId as string;
+            if (!tenantId && token.role !== 'super_admin') {
+                const userId = token.sub || (token as any).id;
+                if (userId) {
+                    const dbUser = await User.findById(userId);
+                    if (dbUser && dbUser.tenantId) {
+                        tenantId = dbUser.tenantId;
+                    }
+                }
+            }
         }
 
-        const tenantId = token.tenantId;
         const filter = tenantId ? { tenantId } : {};
         const products = await Product.find(filter).sort({ name: 1 });
 

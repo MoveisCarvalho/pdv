@@ -20,7 +20,6 @@ export async function PATCH(
             return NextResponse.json({ success: false, error: 'Sem permissão' }, { status: 403 });
         }
 
-        // Garante o tenantId via token ou busca direta no User model se o token estiver incompleto
         let tenantId = token.tenantId;
         if (!tenantId && token.role !== 'super_admin') {
             const userId = token.sub || (token as any).id;
@@ -35,18 +34,15 @@ export async function PATCH(
         const resolvedParams = await Promise.resolve(params);
         const id = resolvedParams.id;
 
-        // Primeiro, busca o pedido para verificar se pertence ao tenant correto
         const filter = token.role === 'super_admin' ? { _id: id } : { _id: id, tenantId };
         const existingOrder = await Order.findOne(filter);
         if (!existingOrder) {
             return NextResponse.json({ success: false, error: 'Comanda não encontrada ou não pertence ao seu tenant' }, { status: 404 });
         }
 
-        // A partir daqui, todas as operações usam existingOrder
         const body = await request.json();
         const { status, cancellationReason, cancelledBy, paymentMethod, total, items, newItems, itemId, itemStatus, customerName } = body;
 
-        // Se a requisição for para atualizar o status de um item específico do KDS
         if (itemId && itemStatus) {
             const updateResult = await Order.updateOne(
                 { _id: id, "items._id": itemId },
@@ -54,7 +50,6 @@ export async function PATCH(
             );
 
             if (updateResult.modifiedCount === 0) {
-                // Fallback: atualiza manualmente
                 const item = existingOrder.items.find((i: any) => i._id?.toString() === itemId);
                 if (item) {
                     item.status = itemStatus;
@@ -69,7 +64,6 @@ export async function PATCH(
             return NextResponse.json({ success: true, data: updatedOrder }, { status: 200 });
         }
 
-        // Demais atualizações
         const order = existingOrder;
 
         if (status === 'cancelado' && order.status !== 'cancelado') {
@@ -95,7 +89,6 @@ export async function PATCH(
             if (paymentMethod) order.paymentMethod = paymentMethod;
             if (customerName) order.customerName = customerName;
 
-            // 1. Suporte caso o frontend envie a lista completa de itens (reconciliação inteligente)
             if (items && Array.isArray(items)) {
                 const existingItems = order.items || [];
                 const activeOrCompletedItems = existingItems.filter(
@@ -151,9 +144,7 @@ export async function PATCH(
                 }
 
                 order.items = updatedItems;
-            }
-            // 2. Suporte caso o frontend envie explicitamente apenas os newItems
-            else if (newItems && Array.isArray(newItems) && newItems.length > 0) {
+            } else if (newItems && Array.isArray(newItems) && newItems.length > 0) {
                 for (const newItem of newItems) {
                     if (newItem.productId) {
                         await Product.findByIdAndUpdate(newItem.productId, {

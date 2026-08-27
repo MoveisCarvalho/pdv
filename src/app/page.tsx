@@ -12,57 +12,19 @@ import {
   LogOut,
   Lock,
   Store,
-  Building2
+  Building2,
+  QrCode
 } from "lucide-react";
 import Link from "next/link";
 import { signOut, useSession } from 'next-auth/react';
 import { hasPermission, type Role } from '@/src/lib/permissions';
-
-// Lista de módulos com permissões necessárias - ORDEM AJUSTADA
-const modules = [
-  {
-    href: '/pos',
-    icon: ShoppingCart,
-    label: 'Frente de Caixa',
-    permission: 'view_orders'
-  },
-  {
-    href: '/kds',
-    icon: ChefHat,
-    label: 'Painel Cozinha',
-    permission: 'view_orders'
-  },
-  {
-    href: '/admin',
-    icon: Package,
-    label: 'Gestão',
-    permission: 'view_products'
-  },
-  {
-    href: '/mobile',
-    icon: Smartphone,
-    label: 'Pedido Mobile',
-    permission: 'create_orders'
-  },
-  {
-    href: '/employees',
-    icon: Users,
-    label: 'Funcionários',
-    permission: 'view_employees'
-  },
-  {
-    href: '/tenants',
-    icon: Building2,
-    label: 'Empresas',
-    permission: 'view_tenants'
-  },
-];
 
 export default function Home() {
   const { data: session } = useSession();
   const userRole = (session?.user?.role as Role) || 'employee';
   const userName = session?.user?.name || 'Usuário';
   const tenantName = session?.user?.tenantName || '';
+  const tenantId = (session?.user as any)?.tenantId || '';
 
   const roleLabels: Record<string, string> = {
     super_admin: 'Super Admin',
@@ -74,6 +36,47 @@ export default function Home() {
   };
 
   const userRoleLabel = roleLabels[userRole] || userRole;
+
+  // Lista de módulos com permissões necessárias - Rota do mobile ajustada dinamicamente com o tenantId
+  const modules = [
+    {
+      href: '/pos',
+      icon: ShoppingCart,
+      label: 'Frente de Caixa',
+      permission: 'view_orders'
+    },
+    {
+      href: '/kds',
+      icon: ChefHat,
+      label: 'Painel Cozinha',
+      permission: 'view_orders'
+    },
+    {
+      href: '/admin',
+      icon: Package,
+      label: 'Gestão',
+      permission: 'view_products'
+    },
+    {
+      href: tenantId ? `/menu/${tenantId}` : '/mobile',
+      icon: Smartphone,
+      label: 'Cardápio / Mesa',
+      permission: 'create_orders',
+      isExternal: true
+    },
+    {
+      href: '/employees',
+      icon: Users,
+      label: 'Funcionários',
+      permission: 'view_employees'
+    },
+    {
+      href: '/tenants',
+      icon: Building2,
+      label: 'Empresas',
+      permission: 'view_tenants'
+    },
+  ];
 
   const accessibleModules = modules.filter(mod =>
     hasPermission(userRole, mod.permission) || userRole === 'super_admin'
@@ -137,6 +140,7 @@ export default function Home() {
                 <Link
                   key={mod.href}
                   href={mod.href}
+                  target={mod.isExternal ? '_blank' : '_self'}
                   className="bg-white dark:bg-slate-900 p-3 rounded-xl border border-slate-200 dark:border-slate-800 hover:border-indigo-500 transition-all text-center shadow-sm hover:shadow-md"
                 >
                   <Icon size={22} className="mx-auto text-indigo-600 dark:text-indigo-400 mb-1" />
@@ -176,7 +180,7 @@ export default function Home() {
                 🚀 Frente de Caixa
               </span>
               <span className="px-3 py-1.5 bg-white/20 backdrop-blur-sm rounded-full text-xs font-medium border border-white/30">
-                📱 Mobile
+                📱 Cardápio Mobile por QR Code
               </span>
               <span className="px-3 py-1.5 bg-white/20 backdrop-blur-sm rounded-full text-xs font-medium border border-white/30">
                 📊 Gestão

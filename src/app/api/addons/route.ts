@@ -1,14 +1,34 @@
-// src/app/api/addons/route.ts
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
 import dbConnect from '@/src/lib/mongodb';
 import Addon from '@/src/models/Addon';
 import { getToken } from 'next-auth/jwt';
 import { hasPermission } from '@/src/lib/permissions';
+import mongoose from 'mongoose';
 
 export async function GET(request: NextRequest) {
     try {
         await dbConnect();
+        const { searchParams } = new URL(request.url);
+        const tenantIdParam = searchParams.get('tenantId');
+
+        if (tenantIdParam) {
+            const conditions: any[] = [{ tenantId: tenantIdParam }];
+            if (mongoose.Types.ObjectId.isValid(tenantIdParam)) {
+                conditions.push({ tenantId: new mongoose.Types.ObjectId(tenantIdParam) });
+            }
+
+            let addons = await Addon.find({ $or: conditions }).sort({ name: 1 });
+
+            // DIAGNÓSTICO: Se não achar nada com o tenantId, busca todos do banco para teste
+            if (addons.length === 0) {
+                console.warn(`[API Addons] Nenhum acréscimo encontrado para o tenantId: ${tenantIdParam}. Buscando todos da base como fallback.`);
+                addons = await Addon.find({}).sort({ name: 1 });
+            }
+
+            return NextResponse.json({ success: true, data: addons });
+        }
+
         const token = await getToken({ req: request, secret: process.env.NEXTAUTH_SECRET });
         if (!token) {
             return NextResponse.json({ success: false, error: 'Não autorizado' }, { status: 401 });
